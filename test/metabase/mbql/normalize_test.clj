@@ -281,6 +281,11 @@
   {:query {:order-by [[:asc [:field-id 10]]]}}
   (#'normalize/canonicalize {:query {:order-by [[[:field-id 10] :asc]]}}))
 
+;; MBQL 95 old names should be handled
+(expect
+  {:query {:order-by [[:asc [:field-id 10]]]}}
+  (#'normalize/canonicalize {:query {:order-by [[10 :ascending]]}}))
+
 ;; field-id should be added if needed
 (expect
   {:query {:order-by [[:asc [:field-id 10]]]}}

@@ -274,12 +274,18 @@
   "Make sure order by clauses like `[:asc 10]` get `:field-id` added where appropriate, e.g. `[:asc [:field-id 10]]`"
   [order-by-clause]
   (vec (for [subclause order-by-clause
-             :let [[direction field-id] (if (#{:asc :desc} (first subclause))
-                                          ;; normal [<direction> <field>] clause
-                                          subclause
-                                          ;; MBQL 95 reversed [<field> <direction>] clause
-                                          (reverse subclause))]]
-         [direction (wrap-implicit-field-id field-id)])))
+             :let      [[direction field-id] (if (#{:asc :desc :ascending :descending} (first subclause))
+                                               ;; normal [<direction> <field>] clause
+                                               subclause
+                                               ;; MBQL 95 reversed [<field> <direction>] clause
+                                               (reverse subclause))]]
+         [(case direction
+            :asc        :asc
+            :desc       :desc
+            ;; old MBQL 95 names
+            :ascending  :asc
+            :descending :desc)
+          (wrap-implicit-field-id field-id)])))
 
 (defn- canonicalize-top-level-mbql-clauses
   "Perform specific steps to canonicalize the various top-level clauses in an MBQL query."

@@ -613,15 +613,6 @@
           (expand query)
           query))))
 
-(defmacro ^:deprecated query
-  "Build a query by threading an (initially empty) map through each form in BODY with `->`.
-   The final result is validated against the `Query` schema."
-  {:style/indent 0}
-  [& body]
-  `(-> {}
-       ~@body
-       expand-inner))
-
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                                OTHER HELPER FNS                                                |

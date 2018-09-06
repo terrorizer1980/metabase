@@ -50,7 +50,7 @@
     (tu/with-temporary-setting-values [report-timezone "Europe/Brussels"]
       (-> (data/run-mbql-query users
             {:filter [:between $last_login "2014-07-02" "2014-07-03"]})
-          qptest/rows
+          qpt/rows
           set))))
 
 ;; Query PG using a report-timezone set to pacific time. Should adjust the query parameter using that report timezone
@@ -61,7 +61,7 @@
     (tu/with-temporary-setting-values [report-timezone "America/Los_Angeles"]
       (-> (data/run-mbql-query users
             {:filter [:between $last_login "2014-08-02T03:00:00.000000" "2014-08-02T06:00:00.000000"]})
-          qptest/rows
+          qpt/rows
           set))))
 
 (defn- quote-name [identifier]
@@ -145,7 +145,7 @@
     (tu/with-temporary-setting-values [report-timezone "America/Los_Angeles"]
       (-> (data/run-mbql-query users
             {:filter [:between $last_login "2014-08-02T10:00:00.000000Z" "2014-08-02T13:00:00.000000Z"]})
-          qptest/rows
+          qpt/rows
           set))))
 
 ;; Checking UTC report timezone filtering and responses
@@ -155,7 +155,7 @@
     (tu/with-temporary-setting-values [report-timezone "UTC"]
       (-> (data/run-mbql-query users
             {:filter [:between $last_login "2014-08-02T10:00:00.000000" "2014-08-02T13:00:00.000000"]})
-          qptest/rows
+          qpt/rows
           set))))
 
 ;; With no report timezone, the JVM timezone is used. For our tests this is UTC so this should be the same as
@@ -165,5 +165,5 @@
   (with-tz-db
     (-> (data/run-mbql-query users
           {:filter [:between $last_login "2014-08-02T10:00:00.000000" "2014-08-02T13:00:00.000000"]})
-        qptest/rows
+        qpt/rows
         set)))
