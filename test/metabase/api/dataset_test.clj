@@ -15,7 +15,7 @@
              [database :as database]
              [query-execution :refer [QueryExecution]]]
             [metabase.test
-             [data :as data :refer :all]
+             [data :as data :refer :all :as data]
              [util :as tu]]
             [metabase.test.data
              [dataset-definitions :as defs]
@@ -165,8 +165,7 @@
    ["4" "2014-03-11" "5" "4"]
    ["5" "2013-05-05" "3" "49"]]
   (let [result ((user->client :rasta) :post 200 "dataset/csv" :query
-                (json/generate-string (wrap-inner-query
-                                        (query checkins))))]
+                (json/generate-string (data/mbql-query checkins)))]
     (take 5 (parse-and-sort-csv result))))
 
 ;; Check an empty date column
@@ -178,8 +177,7 @@
    ["5" "2013-05-05" "" "3" "49"]]
   (with-db (get-or-create-database! defs/test-data-with-null-date-checkins)
     (let [result ((user->client :rasta) :post 200 "dataset/csv" :query
-                  (json/generate-string (wrap-inner-query
-                                          (query checkins))))]
+                  (json/generate-string (data/mbql-query checkins)))]
       (take 5 (parse-and-sort-csv result)))))
 
 ;; SQLite doesn't return proper date objects but strings, they just pass through the qp untouched
@@ -190,8 +188,7 @@
    ["4" "2014-03-11" "5" "4"]
    ["5" "2013-05-05" "3" "49"]]
   (let [result ((user->client :rasta) :post 200 "dataset/csv" :query
-                (json/generate-string (wrap-inner-query
-                                        (query checkins))))]
+                (json/generate-string (data/mbql-query checkins)))]
     (take 5 (parse-and-sort-csv result))))
 
 ;; DateTime fields are untouched when exported
@@ -202,8 +199,7 @@
    ["4" "Simcha Yan" "2014-01-01T08:30:00.000Z"]
    ["5" "Quentin Sören" "2014-10-03T17:30:00.000Z"]]
   (let [result ((user->client :rasta) :post 200 "dataset/csv" :query
-                (json/generate-string (wrap-inner-query
-                                        (query users))))]
+                (json/generate-string (data/mbql-query checkins)))]
     (take 5 (parse-and-sort-csv result))))
 
 ;; Check that we can export the results of a nested query

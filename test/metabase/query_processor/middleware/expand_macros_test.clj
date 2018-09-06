@@ -9,9 +9,7 @@
              [metric :refer [Metric]]
              [segment :refer [Segment]]
              [table :refer [Table]]]
-            [metabase.query-processor.middleware
-             [expand :as ql]
-             [expand-macros :as expand-macros :refer :all]]
+            [metabase.query-processor.middleware.expand-macros :as expand-macros :refer :all]
             [metabase.test.data :as data]
             [metabase.test.data.datasets :as datasets]
             [toucan.util.test :as tt]))
@@ -178,7 +176,7 @@
                :type     :query
                :query    {:source-table (data/id :venues)
                           :aggregation  [["METRIC" (u/get-id metric)]]
-                          :breakout     [(ql/breakout (ql/field-id (data/id :venues :price)))]}})))))
+                          :breakout     [[:field-id (data/id :venues :price)]]}})))))
 
 ;; make sure that we don't try to expand GA "metrics" (#6104)
 (expect

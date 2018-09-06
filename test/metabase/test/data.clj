@@ -16,13 +16,10 @@
              [field :as field :refer [Field]]
              [field-values :refer [FieldValues]]
              [table :refer [Table]]]
-            [metabase.query-processor.interface :as qi]
-            [metabase.query-processor.middleware.expand :as ql]
             [metabase.test.data
              [dataset-definitions :as defs]
              [datasets :refer [*driver*]]
              [interface :as i]]
-            [schema.core :as s]
             [toucan.db :as db])
   (:import [metabase.test.data.interface DatabaseDefinition TableDefinition]))
 

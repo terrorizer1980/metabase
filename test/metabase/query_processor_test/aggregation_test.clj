@@ -3,10 +3,10 @@
   (:require [metabase
              [query-processor-test :refer :all]
              [util :as u]]
-            [metabase.query-processor.middleware.expand :as ql]
-            [metabase.test.data :as data]
-            [metabase.test.data.datasets :as datasets]
-            [metabase.test.util :as tu]))
+            [metabase.test
+             [data :as data]
+             [util :as tu]]
+            [metabase.test.data.datasets :as datasets]))
 
 ;;; ---------------------------------------------- "COUNT" AGGREGATION -----------------------------------------------
 

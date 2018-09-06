@@ -18,7 +18,6 @@
              [segment :refer [Segment]]
              [table :refer [Table]]]
             [metabase.models.query.permissions :as query-perms]
-            [metabase.query-processor.middleware.expand :as ql]
             [metabase.test
              [data :as data]
              [util :as tu]]
@@ -146,8 +145,8 @@
          :query    {:source-query {:source_table (data/id :checkins)
                                    :filter [">" (data/id :checkins :date) "2014-01-01"]}
                     :aggregation  [:count]
-                    :order-by     [[:asc (ql/fk-> (data/id :checkins :venue_id) (data/id :venues :price))]]
-                    :breakout     [(ql/fk-> (data/id :checkins :venue_id) (data/id :venues :price))]}}))))
+                    :order-by     [[:asc [:fk-> (data/id :checkins :venue_id) (data/id :venues :price)]]]
+                    :breakout     [[:fk-> (data/id :checkins :venue_id) (data/id :venues :price)]]}}))))
 
 ;; Test two breakout columns from the nested query, both following an FK
 (datasets/expect-with-engines (non-timeseries-engines-with-feature :nested-queries :foreign-keys)
@@ -166,11 +165,11 @@
          :type     :query
          :query    {:source-query {:source_table (data/id :checkins)
                                    :filter [">" (data/id :checkins :date) "2014-01-01"]}
-                    :filter [["<" (ql/fk-> (data/id :checkins :venue_id) (data/id :venues :latitude)) 34]]
+                    :filter [["<" [:fk-> (data/id :checkins :venue_id) (data/id :venues :latitude)] 34]]
                     :aggregation  [:count]
-                    :order-by     [[:asc (ql/fk-> (data/id :checkins :venue_id) (data/id :venues :price))]]
-                    :breakout     [(ql/fk-> (data/id :checkins :venue_id) (data/id :venues :price))
-                                   (ql/fk-> (data/id :checkins :venue_id) (data/id :venues :latitude))]}}))))
+                    :order-by     [[:asc [:fk-> (data/id :checkins :venue_id) (data/id :venues :price)]]]
+                    :breakout     [[:fk-> (data/id :checkins :venue_id) (data/id :venues :price)]
+                                   [:fk-> (data/id :checkins :venue_id) (data/id :venues :latitude)]]}}))))
 
 ;; Test two breakout columns from the nested query, one following an FK the other from the source table
 (datasets/expect-with-engines (non-timeseries-engines-with-feature :nested-queries :foreign-keys)
@@ -190,9 +189,9 @@
          :query    {:source-query {:source_table (data/id :checkins)
                                    :filter [">" (data/id :checkins :date) "2014-01-01"]}
                     :aggregation  [:count]
-                    :filter       [["=" (ql/fk-> (data/id :checkins :venue_id) (data/id :venues :price)) 1]]
-                    :order-by     [[:asc (ql/fk-> (data/id :checkins :venue_id) (data/id :venues :price))]]
-                    :breakout     [(ql/fk-> (data/id :checkins :venue_id) (data/id :venues :price))
+                    :filter       [["=" [:fk-> (data/id :checkins :venue_id) (data/id :venues :price)] 1]]
+                    :order-by     [[:asc [:fk-> (data/id :checkins :venue_id) (data/id :venues :price)]]]
+                    :breakout     [[:fk-> (data/id :checkins :venue_id) (data/id :venues :price)]
                                    [:field-literal (keyword (data/format-name :user_id)) :type/Integer]]
                     :limit        5}}))))
 

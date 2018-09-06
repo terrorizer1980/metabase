@@ -3,9 +3,7 @@
   (:require [expectations :refer :all]
             [metabase
              [query-processor :as qp]
-             [query-processor-test :refer [first-row format-rows-by non-timeseries-engines rows]]
-             [util :as u]]
-            [metabase.query-processor.middleware.expand :as ql]
+             [query-processor-test :refer [first-row format-rows-by non-timeseries-engines rows]]]
             [metabase.query-processor.middleware.parameters.mbql :as mbql-params :refer :all]
             [metabase.test.data :as data]
             [metabase.test.data.datasets :as datasets]
@@ -129,8 +127,8 @@
     (format-rows-by [int]
       (qp/process-query {:database   (data/id)
                          :type       :query
-                         :query      (data/query checkins
-                                       (ql/aggregation (ql/count)))
+                         :query      (data/mbql-query checkins
+                                       {:aggregation [[:count]]})
                          :parameters [{:hash   "abc123"
                                        :name   "foo"
                                        :type   "date"
@@ -144,8 +142,8 @@
     (format-rows-by [int]
       (qp/process-query {:database   (data/id)
                          :type       :query
-                         :query      (data/query checkins
-                                       (ql/aggregation (ql/count)))
+                         :query      (data/mbql-query checkins
+                                       {:aggregation [[:count]]})
                          :parameters [{:hash   "abc123"
                                        :name   "foo"
                                        :type   "number"
@@ -159,8 +157,8 @@
     (format-rows-by [int]
       (qp/process-query {:database   (data/id)
                          :type       :query
-                         :query      (data/query checkins
-                                       (ql/aggregation (ql/count)))
+                         :query      (data/mbql-query checkins
+                                       {:aggregation [[:count]]})
                          :parameters [{:hash   "abc123"
                                        :name   "foo"
                                        :type   "number"
@@ -171,8 +169,7 @@
 (datasets/expect-with-engines params-test-engines
   [[9 "Nils Gotam"]]
   (format-rows-by [int str]
-    (let [inner-query (data/query users)
-          outer-query (-> (data/wrap-inner-query inner-query)
+    (let [outer-query (-> (data/mbql-query users)
                           (assoc :parameters [{:name   "id"
                                                :type   "id"
                                                :target ["field-id" (data/id :users :id)]
@@ -183,9 +180,8 @@
 (datasets/expect-with-engines params-test-engines
   [[6]]
   (format-rows-by [int]
-    (let [inner-query (data/query venues
-                        (ql/aggregation (ql/count)))
-          outer-query (-> (data/wrap-inner-query inner-query)
+    (let [outer-query (-> (data/mbql-query
+                           {:aggregation [[:count]]})
                           (assoc :parameters [{:name   "price"
                                                :type   "category"
                                                :target ["field-id" (data/id :venues :price)]
@@ -199,9 +195,8 @@
 (datasets/expect-with-engines params-test-engines
   [[19]]
   (format-rows-by [int]
-    (let [inner-query (data/query venues
-                        (ql/aggregation (ql/count)))
-          outer-query (-> (data/wrap-inner-query inner-query)
+    (let [outer-query (-> (data/mbql-query
+                           {:aggregation [[:count]]})
                           (assoc :parameters [{:name   "price"
                                                :type   "category"
                                                :target ["field-id" (data/id :venues :price)]
@@ -217,9 +212,8 @@
                 "FROM \"PUBLIC\".\"VENUES\" "
                 "WHERE (\"PUBLIC\".\"VENUES\".\"PRICE\" = 3 OR \"PUBLIC\".\"VENUES\".\"PRICE\" = 4)")
    :params nil}
-  (let [inner-query (data/query venues
-                      (ql/aggregation (ql/count)))
-        outer-query (-> (data/wrap-inner-query inner-query)
+  (let [outer-query (-> (data/mbql-query venues
+                          {:aggregation [[:count]]})
                         (assoc :parameters [{:name   "price"
                                              :type   "category"
                                              :target ["field-id" (data/id :venues :price)]
@@ -237,9 +231,8 @@
             (du/->Timestamp #inst "2014-06-30")
             (du/->Timestamp #inst "2015-06-01")
             (du/->Timestamp #inst "2015-06-30")]}
-  (let [inner-query (data/query checkins
-                      (ql/aggregation (ql/count)))
-        outer-query (-> (data/wrap-inner-query inner-query)
+  (let [outer-query (-> (data/mbql-query checkins
+                          {:aggregation [[:count]]})
                         (assoc :parameters [{:name   "date"
                                              :type   "date/month"
                                              :target ["field-id" (data/id :checkins :date)]

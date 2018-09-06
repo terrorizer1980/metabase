@@ -1,25 +1,23 @@
 (ns metabase.query-processor.middleware.binning-test
   (:require [expectations :refer [expect]]
-            [metabase.query-processor.middleware
-             [binning :as binning :refer :all]
-             [expand :as ql]]))
+            [metabase.query-processor.middleware.binning :as binning :refer :all]))
 
 (expect
   {}
-  (#'binning/filter->field-map (ql/and
-                                (ql/= (ql/field-id 1) 10)
-                                (ql/= (ql/field-id 2) 10))))
+  (#'binning/filter->field-map [:and
+                                [:= [:field-id 1] 10]
+                                [:= [:field-id 2] 10]]))
 
 (expect
-  {1 [(ql/< (ql/field-id 1) 10) (ql/> (ql/field-id 1) 1)]
-   2 [(ql/> (ql/field-id 2) 20) (ql/< (ql/field-id 2) 10)]
-   3 [(ql/between (ql/field-id 3) 5 10)]}
-  (#'binning/filter->field-map (ql/and
-                                (ql/< (ql/field-id 1) 10)
-                                (ql/> (ql/field-id 1) 1)
-                                (ql/> (ql/field-id 2) 20)
-                                (ql/< (ql/field-id 2) 10)
-                                (ql/between (ql/field-id 3) 5 10))))
+  {1 [[:< [:field-id 1] 10] [:> [:field-id 1] 1]]
+   2 [[:> [:field-id 2] 20] [:< [:field-id 2] 10]]
+   3 [[:between [:field-id 3] 5 10]]}
+  (#'binning/filter->field-map [:and
+                                [:< [:field-id 1] 10]
+                                [:> [:field-id 1] 1]
+                                [:> [:field-id 2] 20]
+                                [:< [:field-id 2] 10]
+                                [:between [:field-id 3] 5 10]]))
 
 (expect
   [[1.0 1.0 1.0]
@@ -40,12 +38,12 @@
 (expect
   [1 10]
   (#'binning/extract-bounds test-min-max-field
-                            {1 [(ql/> (ql/field-id 1) 1) (ql/< (ql/field-id 1) 10)]}))
+                            {1 [[:> [:field-id 1] 1] [:< [:field-id 1] 10]]}))
 
 (expect
   [1 10]
   (#'binning/extract-bounds test-min-max-field
-                            {1 [(ql/between (ql/field-id 1) 1 10)]}))
+                            {1 [[:between [:field-id 1] 1 10]]}))
 
 (expect
   [100 1000]
@@ -55,19 +53,19 @@
 (expect
   [500 1000]
   (#'binning/extract-bounds test-min-max-field
-                            {1 [(ql/> (ql/field-id 1) 500)]}))
+                            {1 [[:> [:field-id 1] 500]]}))
 
 (expect
   [100 500]
   (#'binning/extract-bounds test-min-max-field
-                            {1 [(ql/< (ql/field-id 1) 500)]}))
+                            {1 [[:< [:field-id 1] 500]]}))
 
 (expect
   [600 700]
   (#'binning/extract-bounds test-min-max-field
-                            {1 [(ql/> (ql/field-id 1) 200)
-                                (ql/< (ql/field-id 1) 800)
-                                (ql/between (ql/field-id 1) 600 700)]}))
+                            {1 [[:> [:field-id 1] 200]
+                                [:< [:field-id 1] 800]
+                                [:between [:field-id 1] 600 700]]}))
 
 (expect
   [[0.0 1000.0 125.0 8]

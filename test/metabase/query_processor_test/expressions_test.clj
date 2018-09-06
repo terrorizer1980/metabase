@@ -3,7 +3,6 @@
   (:require [metabase
              [query-processor-test :refer :all]
              [util :as u]]
-            [metabase.query-processor.middleware.expand :as ql]
             [metabase.test.data :as data]
             [metabase.test.data.datasets :as datasets]))
 
@@ -38,7 +37,7 @@
    [3 "The Apple Pan"         11 34.0406 -118.428 2 2.0]]
   (format-rows-by [int str int (partial u/round-to-decimals 4) (partial u/round-to-decimals 4) int float]
     (rows (data/run-mbql-query venues
-            {:expressions {:wow (ql/- [:* $price 2] [:+ $price 0])}
+            {:expressions {:wow [:- [:* $price 2] [:+ $price 0]]}
              :limit       3
              :order-by    [[:asc $id]]}))))
 
@@ -49,7 +48,7 @@
    [3 "The Apple Pan"         11 34.0406 -118.428 2 1.0 3.0]]
   (format-rows-by [int str int (partial u/round-to-decimals 4) (partial u/round-to-decimals 4) int float float]
     (rows (data/run-mbql-query venues
-            {:expressions {:x (ql/- $price 1)
+            {:expressions {:x [:- $price 1]
                            :y [:+ $price 1]}
              :limit       3
              :order-by    [[:asc $id]]}))))
