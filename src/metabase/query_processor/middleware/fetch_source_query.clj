@@ -47,7 +47,7 @@
                    ;; No need to include result metadata here, it can be large and will clutter the logs
                    (u/pprint-to-str 'yellow (dissoc <> :result_metadata)))))))
 
-(defn- expand-card-source-tables
+(defn- ^:deprecated expand-card-source-tables
   "If `source-table` is a Card reference (a string like `card__100`) then replace that with appropriate
   `:source-query` information. Does nothing if `source-table` is a normal ID. Recurses for nested-nested queries."
   [inner-query]

@@ -115,6 +115,7 @@
       log-query/log-initial-query
       cache/maybe-return-cached-results
       log-query/log-results-metadata
+      ;; TODO - validate
       normalize/normalize
       catch-exceptions/catch-exceptions))
 ;; ▲▲▲ PRE-PROCESSING ▲▲▲ happens from BOTTOM-TO-TOP, e.g. the results of `expand-macros` are passed to

@@ -38,9 +38,11 @@
 
 ;;; ----------------------------------------------------- Fields -----------------------------------------------------
 
-(defclause field-id,      id              su/IntGreaterThanZero)
-(defclause field-literal, field-name      su/NonBlankString)
-(defclause expression,    expression-name su/NonBlankString)
+(defclause field-id, id su/IntGreaterThanZero)
+
+(defclause field-literal, field-name su/NonBlankString, field-type su/FieldType)
+
+(defclause expression, expression-name su/NonBlankString)
 
 (defclause fk->
   source-field (one-of field-id field-literal)
@@ -82,7 +84,7 @@
    number?
    s/Num
 
-   #(and (vector? %) (#{:+ :- :/ :*} (first %)))
+   #(core/and (vector? %) (#{:+ :- :/ :*} (first %)))
    (s/recursive #'ExpressionDef)
 
    :else

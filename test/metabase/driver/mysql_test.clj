@@ -35,7 +35,7 @@
   ;; TODO - use the `rows` function from `metabse.query-processor-test`. Preferrably after it's moved to some sort of
   ;; shared test util namespace
   (-> (data/dataset metabase.driver.mysql-test/all-zero-dates
-        (data/run-query exciting-moments-in-history))
+        (data/run-mbql-query exciting-moments-in-history))
       :data :rows))
 
 

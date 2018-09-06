@@ -7,4 +7,4 @@
   into standard `lisp-case` ones, removing/rewriting legacy clauses, removing empty ones, etc. This is done to
   simplifiy the logic in the QP steps following this."
   [qp]
-  (comp qp normalize))
+  (comp qp normalize/normalize))

@@ -14,9 +14,8 @@
              [card :refer [Card]]
              [database :as database]
              [query-execution :refer [QueryExecution]]]
-            [metabase.query-processor.middleware.expand :as ql]
             [metabase.test
-             [data :refer :all]
+             [data :as data :refer :all]
              [util :as tu]]
             [metabase.test.data
              [dataset-definitions :as defs]
@@ -50,7 +49,7 @@
 ;;; ## POST /api/meta/dataset
 ;; Just a basic sanity check to make sure Query Processor endpoint is still working correctly.
 (expect
-  [;; API call response
+  [ ;; API call response
    {:data                   {:rows    [[1000]]
                              :columns ["count"]
                              :cols    [{:base_type "type/Integer", :special_type "type/Number", :name "count", :display_name "count", :id nil, :table_id nil,
@@ -59,9 +58,8 @@
     :row_count              1
     :status                 "completed"
     :context                "ad-hoc"
-    :json_query             (-> (wrap-inner-query
-                                  (query checkins
-                                    (ql/aggregation (ql/count))))
+    :json_query             (-> (data/mbql-query checkins
+                                  {:aggregation [[:count]]})
                                 (assoc :type "query")
                                 (assoc-in [:query :aggregation] [{:aggregation-type "count", :custom-name nil}])
                                 (assoc :constraints qp/default-query-constraints))
@@ -82,9 +80,8 @@
     :id           true
     :started_at   true
     :running_time true}]
-  (let [result ((user->client :rasta) :post 200 "dataset" (wrap-inner-query
-                                                            (query checkins
-                                                              (ql/aggregation (ql/count)))))]
+  (let [result ((user->client :rasta) :post 200 "dataset" (data/mbql-query checkins
+                                                            {:aggregation [[:count]]}))]
     [(format-response result)
      (format-response (most-recent-query-execution))]))
 

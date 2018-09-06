@@ -10,7 +10,6 @@
              [query-processor :as qp]
              [sync :as sync]
              [util :as u]]
-            metabase.driver.h2
             [metabase.models
              [database :refer [Database]]
              [dimension :refer [Dimension]]
@@ -22,7 +21,6 @@
             [metabase.test.data
              [dataset-definitions :as defs]
              [datasets :refer [*driver*]]
-             h2
              [interface :as i]]
             [schema.core :as s]
             [toucan.db :as db])
@@ -62,10 +60,11 @@
   [db & body]
   `(do-with-db ~db (fn [] ~@body)))
 
+
 (defn- $->id
   "Convert symbols like `$field` to `id` fn calls. Input is split into separate args by splitting the token on `.`.
-  With no `.` delimiters, it is assumed we're referring to a Field belonging to TABLE-NAME, which is passed
-  implicitly as the first arg. With one or more `.` delimiters, no implicit TABLE-NAME arg is passed to `id`:
+  With no `.` delimiters, it is assumed we're referring to a Field belonging to TABLE-NAME, which is passed implicitly
+  as the first arg. With one or more `.` delimiters, no implicit TABLE-NAME arg is passed to `id`:
 
     $venue_id  -> (id :sightings :venue_id) ; TABLE-NAME is implicit first arg
     $cities.id -> (id :cities :id)          ; specify non-default Table"
@@ -81,55 +80,50 @@
                              (when (= first-char \$)
                                (let [token (apply str rest-chars)]
                                  (if-let [[_ token-1 token-2] (re-matches #"(^.*)->(.*$)" token)]
-                                   `(ql/fk-> ~(->id token-1) ~(->id token-2))
-                                   `(ql/field-id ~(->id token)))))))
+                                   `[:fk-> [:field-id ~(->id token-1)] [:field-id ~(->id token-2)]]
+                                   `[:field-id ~(->id token)])))))
                          form))
                    body)))
 
-(defmacro query
-  "Build a query, expands symbols like `$field` into calls to `id`.
-   Internally, this wraps `metabase.driver.query-processor.expand/query` and includes a call to `source-table`.
-   See the dox for `$->id` for more information on how `$`-prefixed expansion behaves.
 
-     (query venues
-       (ql/filter (ql/= $id 1)))
-
-      -> (ql/query
-           (ql/source-table (id :venues))
-           (ql/filter (ql/= (id :venues :id) 1)))"
-  {:style/indent 1}
-  [table & forms]
-  `(ql/query (ql/source-table (id ~(keyword table)))
-             ~@(map (partial $->id (keyword table)) forms)))
-
-(s/defn wrap-inner-query
+(defn wrap-inner-mbql-query
   "Wrap inner QUERY with `:database` ID and other 'outer query' kvs. DB ID is fetched by looking up the Database for
   the query's `:source-table`."
   {:style/indent 0}
-  [query :- qi/Query]
+  [query]
   {:database (db/select-one-field :db_id Table, :id (:source-table query))
    :type     :query
    :query    query})
 
-(s/defn run-query*
-  "Call `driver/process-query` on expanded inner QUERY, looking up the `Database` ID for the `source-table.`
+(defmacro mbql-query
+  "Build a query, expands symbols like `$field` into calls to `id`. See the dox for `$->id` for more information on how
+  `$`-prefixed expansion behaves.
 
-     (run-query* (query (source-table 5) ...))"
-  {:style/indent 0}
-  [query :- qi/Query]
-  (qp/process-query (wrap-inner-query query)))
+    (mbql-query venues
+      {:filter [:= $id 1]})
 
-(defmacro run-query
-  "Like `query`, but runs the query as well."
+    ;; -> {:database <database>
+           :type     :query
+           :query    {:source-table (data/id :venues)
+                      :filter       [:= [:field-id (data/id :venues :id)] 1]}} "
   {:style/indent 1}
-  [table & forms]
-  `(run-query* (query ~table ~@forms)))
+  [table & [query]]
+  `(wrap-inner-mbql-query
+     ~(merge `{:source-table (id ~(keyword table))}
+             ($->id (keyword table) query))))
+
+(defmacro run-mbql-query
+  "Like `mbql-query`, but runs the query as well."
+  {:style/indent 1}
+  [table & [query]]
+  `(qp/process-query
+     (mbql-query ~table ~query)))
 
 
 (defn format-name
   "Format a SQL schema, table, or field identifier in the correct way for the current database by calling the driver's
-   implementation of `format-name`. (Most databases use the default implementation of `identity`; H2 uses
-   `clojure.string/upper-case`.) This function DOES NOT quote the identifier."
+  implementation of `format-name`. (Most databases use the default implementation of `identity`; H2 uses
+  `clojure.string/upper-case`.) This function DOES NOT quote the identifier."
   [nm]
   (i/format-name *driver* (name nm)))
 

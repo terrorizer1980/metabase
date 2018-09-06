@@ -1,20 +1,15 @@
 (ns metabase.query-processor-test.timezones-test
-  (:require [clojure.java.jdbc :as jdbc]
-            [expectations :refer :all]
-            [metabase
+  (:require [metabase
              [query-processor :as qp]
-             [query-processor-test :as qptest]]
-            [metabase.query-processor.middleware.expand :as ql]
-            [metabase.query-processor-test :as qpt]
+             [query-processor-test :as qpt]]
             [metabase.test
              [data :as data]
              [util :as tu]]
-            [metabase.test.data.interface :as i]
-            [metabase.test.data.mysql :as mysql-data]
-            [metabase.driver.generic-sql :as sql]
-            [metabase.test.data.generic-sql :as generic-sql]
-            [metabase.test.data.datasets :refer [expect-with-engine expect-with-engines *engine* *driver*]]
-            [metabase.test.data.dataset-definitions :as defs]
+            [metabase.test.data
+             [dataset-definitions :as defs]
+             [datasets :refer [*driver* *engine* expect-with-engine expect-with-engines]]
+             [generic-sql :as generic-sql]
+             [interface :as i]]
             [toucan.db :as db])
   (:import metabase.driver.mysql.MySQLDriver))
 
@@ -53,10 +48,8 @@
     [12 "Kfir Caj" "2014-07-03T01:30:00.000Z"]}
   (with-tz-db
     (tu/with-temporary-setting-values [report-timezone "Europe/Brussels"]
-      (-> (data/run-query users
-            (ql/filter (ql/between $last_login
-                                   "2014-07-02"
-                                   "2014-07-03")))
+      (-> (data/run-mbql-query users
+            {:filter [:between $last_login "2014-07-02" "2014-07-03"]})
           qptest/rows
           set))))
 
@@ -66,10 +59,8 @@
   default-pacific-results
   (with-tz-db
     (tu/with-temporary-setting-values [report-timezone "America/Los_Angeles"]
-      (-> (data/run-query users
-            (ql/filter (ql/between $last_login
-                                   "2014-08-02T03:00:00.000000"
-                                   "2014-08-02T06:00:00.000000")))
+      (-> (data/run-mbql-query users
+            {:filter [:between $last_login "2014-08-02T03:00:00.000000" "2014-08-02T06:00:00.000000"]})
           qptest/rows
           set))))
 
@@ -152,10 +143,8 @@
   default-pacific-results
   (with-tz-db
     (tu/with-temporary-setting-values [report-timezone "America/Los_Angeles"]
-      (-> (data/run-query users
-            (ql/filter (ql/between $last_login
-                                   "2014-08-02T10:00:00.000000Z"
-                                   "2014-08-02T13:00:00.000000Z")))
+      (-> (data/run-mbql-query users
+            {:filter [:between $last_login "2014-08-02T10:00:00.000000Z" "2014-08-02T13:00:00.000000Z"]})
           qptest/rows
           set))))
 
@@ -164,10 +153,8 @@
   default-utc-results
   (with-tz-db
     (tu/with-temporary-setting-values [report-timezone "UTC"]
-      (-> (data/run-query users
-            (ql/filter (ql/between $last_login
-                                   "2014-08-02T10:00:00.000000"
-                                   "2014-08-02T13:00:00.000000")))
+      (-> (data/run-mbql-query users
+            {:filter [:between $last_login "2014-08-02T10:00:00.000000" "2014-08-02T13:00:00.000000"]})
           qptest/rows
           set))))
 
@@ -176,9 +163,7 @@
 (expect-with-engines [:postgres :bigquery :mysql]
   default-utc-results
   (with-tz-db
-    (-> (data/run-query users
-          (ql/filter (ql/between $last_login
-                                 "2014-08-02T10:00:00.000000"
-                                 "2014-08-02T13:00:00.000000")))
+    (-> (data/run-mbql-query users
+          {:filter [:between $last_login "2014-08-02T10:00:00.000000" "2014-08-02T13:00:00.000000"]})
         qptest/rows
         set)))

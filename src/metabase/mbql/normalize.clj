@@ -44,10 +44,12 @@
 
 (defn- normalize-field-literal-tokens
   "Similarly, for Field literals, keep the arg as-is, but make sure it is a string."
-  [_ field-name]
-  [:field-literal (if (keyword? field-name)
-                    (u/keyword->qualified-name field-name)
-                    field-name)])
+  [_ field-name field-type]
+  [:field-literal
+   (if (keyword? field-name)
+     (u/keyword->qualified-name field-name)
+     field-name)
+   (keyword field-type)])
 
 (defn- normalize-datetime-field-tokens
   "Datetime fields look like `[:datetime-field <field> <unit>]` or `[:datetime-field <field> :as <unit>]`; normalize the
@@ -300,7 +302,14 @@
      ([_ field unit]
       [:datetime-field (wrap-implicit-field-id field) unit])
      ([_ field _ unit]
-      [:datetime-field (wrap-implicit-field-id field) unit]))})
+      [:datetime-field (wrap-implicit-field-id field) unit]))
+
+   :field-id
+   (fn [_ id]
+     ;; if someone is dumb and does something like [:field-id [:field-literal ...]] be nice and fix it for them.
+     (if (mbql-clause? id)
+       id
+       [:field-id id]))})
 
 (defn- canonicalize-mbql-clauses
   "Walk an `mbql-query` an canonicalize non-top-level clauses like `:fk->`."

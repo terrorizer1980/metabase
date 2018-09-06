@@ -55,8 +55,8 @@
 
 ;; or field literals!
 (expect
-  {:query {:aggregation [:count [:count [:field-literal "ABCDEF"]]]}}
-  (#'normalize/normalize-tokens {:query {:aggregation ["count" ["count" ["field_literal" "ABCDEF"]]]}}))
+  {:query {:aggregation [:count [:count [:field-literal "ABCDEF" :type/Text]]]}}
+  (#'normalize/normalize-tokens {:query {:aggregation ["count" ["count" ["field_literal" "ABCDEF" "type/Text"]]]}}))
 
 ;; event if you trry your best to break things it should handle it
 (expect
@@ -85,13 +85,13 @@
 
 ;; field literals should be exempt too
 (expect
-  {:order-by [[:desc [:field-literal "SALES_TAX"]]]}
-  (#'normalize/normalize-tokens {:order-by [[:desc [:field-literal "SALES_TAX"]]]}) )
+  {:order-by [[:desc [:field-literal "SALES_TAX" :type/Number]]]}
+  (#'normalize/normalize-tokens {:order-by [[:desc [:field-literal "SALES_TAX" :type/Number]]]}) )
 
 ;; ... but they should be converted to strings if passed in as a KW for some reason
 (expect
-  {:order-by [[:desc [:field-literal "SALES/TAX"]]]}
-  (#'normalize/normalize-tokens {:order-by [[:desc ["field_literal" :SALES/TAX]]]}))
+  {:order-by [[:desc [:field-literal "SALES/TAX" :type/Number]]]}
+  (#'normalize/normalize-tokens {:order-by [[:desc ["field_literal" :SALES/TAX "type/Number"]]]}))
 
 ;; does order-by get properly normalized?
 (expect
@@ -304,6 +304,11 @@
 (expect
   {:query {:filter [:= [:datetime-field [:field-id 10] :day] "2018-09-05"]}}
   (#'normalize/canonicalize {:query {:filter [:= [:datetime-field 10 :as :day] "2018-09-05"]}}))
+
+;; if someone is dumb and passes something like a field-literal inside a field-id, fix it for them.
+(expect
+  {:query {:filter [:= [:field-literal "my_field" "type/Number"] 10]}}
+  (#'normalize/canonicalize {:query {:filter [:= [:field-id [:field-literal "my_field" "type/Number"]] 10]}}))
 
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
