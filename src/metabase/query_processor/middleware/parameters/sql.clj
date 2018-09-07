@@ -79,7 +79,7 @@
 ;; Since 'Dimension' (Field Filters) are considered their own `:type`, to *actually* store the type of a Dimension
 ;; look at the key `:widget_type`. This applies to things like the default value for a Dimension as well.
 (def ^:private TagParam
-  "Schema for values passed in as part of the `:template_tags` list."
+  "Schema for values passed in as part of the `:template-tags` list."
   {(s/optional-key :id)          su/NonBlankString ; this is used internally by the frontend
    :name                         su/NonBlankString
    :display_name                 su/NonBlankString
@@ -131,7 +131,7 @@
 ;;; +----------------------------------------------------------------------------------------------------------------+
 
 ;; These functions build a map of information about the types and values of the params used in a query.
-;; (These functions don't parse the query itself, but instead look at the values of `:template_tags` and `:parameters`
+;; (These functions don't parse the query itself, but instead look at the values of `:template-tags` and `:parameters`
 ;; passed along with the query.)
 ;;
 ;;     (query->params-map some-query)
@@ -276,7 +276,7 @@
     value))
 
 (s/defn ^:private value-for-tag :- ParamValue
-  "Given a map TAG (a value in the `:template_tags` dictionary) return the corresponding value from the PARAMS
+  "Given a map TAG (a value in the `:template-tags` dictionary) return the corresponding value from the PARAMS
    sequence. The VALUE is something that can be compiled to SQL via `->replacement-snippet-info`."
   [tag :- TagParam, params :- (s/maybe [DimensionValue])]
   (parse-value-for-type (:type tag) (or (param-value-for-tag tag params)
@@ -294,7 +294,7 @@
                       :param {:type   \"date/range\"
                               :target [\"dimension\" [\"template-tag\" \"checkin_date\"]]
                               :value  \"2015-01-01~2016-09-01\"}}}"
-  [{{tags :template_tags} :native, params :parameters}]
+  [{{tags :template-tags} :native, params :parameters}]
   (into {} (for [[k tag] tags
                  :let    [v (value-for-tag tag params)]
                  :when   v]

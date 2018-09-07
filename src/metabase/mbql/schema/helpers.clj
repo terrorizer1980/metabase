@@ -38,10 +38,19 @@
   optionally be wrapped in `optional` or `rest` to signify that the arg is optional, or to accept varargs:
 
     (defclause count, field (optional Field))
-    (defclause and, filters (rest Filter))"
+    (defclause and, filters (rest Filter))
+
+  Since there are some cases where clauses should be parsed differently in MBQL (such as expressions in the
+  `expressions` clause vs in aggregations), you can give the actual symbol produced by this macro a different name as
+  follows:
+
+    (defclause [ag:+ +] ...) ; define symbol `ag:+` to be used for a `[:+ ...]` clause"
   [clause-name & arg-names-and-schemas]
-  `(def ~(vary-meta clause-name assoc :private true)
-     (clause ~(keyword clause-name) ~@(stringify-names arg-names-and-schemas))))
+  (let [[symb-name clause-name] (if (vector? clause-name)
+                                  clause-name
+                                  [clause-name clause-name])]
+    `(def ~(vary-meta symb-name assoc :private true, :clause-name (keyword clause-name))
+       (clause ~(keyword clause-name) ~@(stringify-names arg-names-and-schemas)))))
 
 
 ;;; ----------------------------------------------------- one-of -----------------------------------------------------
@@ -70,4 +79,4 @@
     (one-of field-id field-literal)"
   [& clauses]
   `(one-of* ~@(for [clause clauses]
-                [(keyword clause) clause])))
+                [(:clause-name (meta clause)) clause])))

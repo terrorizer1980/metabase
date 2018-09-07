@@ -51,7 +51,7 @@
   ([unit]
    (->> (data/with-db (data/get-or-create-database! defs/sad-toucan-incidents)
           (data/run-mbql-query incidents
-            {:aggregation [[:cpunt]]
+            {:aggregation [[:count]]
              :breakout    [[:datetime-field $timestamp unit]]
              :limit       10}))
         rows (format-rows-by [->long-if-number int])))

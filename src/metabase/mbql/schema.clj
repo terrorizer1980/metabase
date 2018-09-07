@@ -1,10 +1,11 @@
 (ns metabase.mbql.schema
   "Schema for validating a *normalized* MBQL query. This is also the definitive grammar for MBQL, wow."
   (:refer-clojure :exclude [count distinct min max + - / * and or not = < > <= >=])
-  (:require [metabase.mbql.schema.helpers :refer [defclause one-of is-clause?]]
-            [metabase.util.schema :as su]
-            [metabase.util.date :as du]
-            [clojure.core :as core]
+  (:require [clojure.core :as core]
+            [metabase.mbql.schema.helpers :refer [defclause is-clause? one-of]]
+            [metabase.util
+             [date :as du]
+             [schema :as su]]
             [schema.core :as s]))
 
 ;;; ------------------------------------------------- Datetime Stuff -------------------------------------------------
@@ -63,7 +64,7 @@
 
 (defclause count,     field (optional Field))
 (defclause avg,       field Field)
-(defclause cum-count, field Field)
+(defclause cum-count, field (optional Field))
 (defclause cum-sum,   field Field)
 (defclause distinct,  field Field)
 (defclause stddev,    field Field)
@@ -71,9 +72,32 @@
 (defclause min,       field Field)
 (defclause max,       field Field)
 
-(def ^:private Aggregation
-  (one-of count avg cum-count cum-sum distinct stddev sum min max))
+;; the following are definitions for expression aggregations, e.g. [:+ [:sum [:field-id 10]] [:sum [:field-id 20]]]
 
+(declare UnnamedAggregation)
+
+(def ^:private ExpressionAggregationArg
+  (s/if number?
+    s/Num
+    UnnamedAggregation))
+
+(defclause [ag:+   +],  x ExpressionAggregationArg, y ExpressionAggregationArg)
+(defclause [ag:-   -],  x ExpressionAggregationArg, y ExpressionAggregationArg)
+(defclause [ag:*   *],  x ExpressionAggregationArg, y ExpressionAggregationArg)
+(defclause [ag:div /],  x ExpressionAggregationArg, y ExpressionAggregationArg) ; ag:/ isn't a valid token
+
+(def ^:private UnnamedAggregation
+  (one-of count avg cum-count cum-sum distinct stddev sum min max ag:+ ag:- ag:* ag:div))
+
+;; any sort of aggregation can be wrapped in a `[:named <ag> <custom-name>]` clause, but you cannot wrap a `:named` in
+;; a `:named`
+
+(defclause named, aggregation UnnamedAggregation, aggregation-name su/NonBlankString)
+
+(def ^:private Aggregation
+  (s/if (partial is-clause? :named)
+    named
+    UnnamedAggregation))
 
 ;;; -------------------------------------------------- Expressions ---------------------------------------------------
 
@@ -84,7 +108,7 @@
    number?
    s/Num
 
-   #(core/and (vector? %) (#{:+ :- :/ :*} (first %)))
+   (every-pred vector? #{:+ :- :/ :*})
    (s/recursive #'ExpressionDef)
 
    :else
@@ -191,7 +215,7 @@
   "Schema for a valid value for a `:source-query` clause."
   (s/if :native
     {:native                         s/Any
-     (s/optional-key :template_tags) s/Any}
+     (s/optional-key :template-tags) s/Any}
     (s/recursive #'MBQLQuery)))
 
 (def MBQLQuery
@@ -201,7 +225,7 @@
     (s/optional-key :source-table) su/IntGreaterThanZero
     (s/optional-key :aggregation)  [Aggregation]
     (s/optional-key :breakout)     [Field]
-    (s/optional-key :expressions)  {su/NonBlankString ExpressionDef}
+    (s/optional-key :expressions)  {s/Keyword ExpressionDef}
     (s/optional-key :fields)       [Field]
     (s/optional-key :filter)       Filter
     (s/optional-key :limit)        su/IntGreaterThanZero

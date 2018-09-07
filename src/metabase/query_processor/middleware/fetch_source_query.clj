@@ -29,7 +29,7 @@
     (assoc (or (:query card-query)
                (when-let [native (:native card-query)]
                  {:native        (trim-query card-id (:query native))
-                  :template_tags (:template_tags native)})
+                  :template-tags (:template-tags native)})
                (throw (Exception. (str "Missing source query in Card " card-id))))
       ;; include database ID as well; we'll pass that up the chain so it eventually gets put in its spot in the
       ;; outer-query

@@ -546,7 +546,7 @@
   "Schema for a valid value for a `:source-query` clause."
   (s/if :native
     {:native                         s/Any
-     (s/optional-key :template_tags) s/Any}
+     (s/optional-key :template-tags) s/Any}
     (s/recursive #'Query)))
 
 

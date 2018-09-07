@@ -23,7 +23,7 @@
   (->> (data/with-db (data/get-or-create-database! defs/test-data-with-time)
          (data/run-mbql-query users
            {:order-by [[:asc $id]]
-            :limt     5}))
+            :limit    5}))
        qpt/rows))
 
 (qpt/expect-with-non-timeseries-dbs-except #{:oracle :mongo :redshift :presto :sparksql}

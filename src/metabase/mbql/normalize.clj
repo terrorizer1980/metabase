@@ -55,15 +55,15 @@
   "Datetime fields look like `[:datetime-field <field> <unit>]` or `[:datetime-field <field> :as <unit>]`; normalize the
   unit, and `:as` (if present) tokens, and the Field."
   ([_ field unit]
-   [:datetime-field (normalize-tokens field) (qputil/normalize-token unit)])
+   [:datetime-field (normalize-tokens field ::ignore-path) (qputil/normalize-token unit)])
   ([_ field _ unit]
-   [:datetime-field (normalize-tokens field) :as (qputil/normalize-token unit)]))
+   [:datetime-field (normalize-tokens field ::ignore-path) :as (qputil/normalize-token unit)]))
 
 (defn- normalize-time-interval-tokens
   "`time-interval`'s `unit` should get normalized, and `amount` if it's not an integer."
   [_ field amount unit]
   [:time-interval
-   (normalize-tokens field)
+   (normalize-tokens field ::ignore-path)
    (if (integer? amount)
      amount
      (qputil/normalize-token amount))
@@ -95,7 +95,7 @@
   (let [clause-name (qputil/normalize-token clause-name)]
     (if-let [f (mbql-clause->special-token-normalization-fn clause-name)]
       (apply f clause-name args)
-      (vec (cons clause-name (map normalize-tokens args))))))
+      (vec (cons clause-name (map #(normalize-tokens % ::ignore-path) args))))))
 
 
 (defn- aggregation-subclause? [x]
@@ -119,17 +119,15 @@
     (map normalize-ag-clause-tokens ag-clause)
 
     :else
-    (normalize-tokens ag-clause)))
+    (normalize-tokens ag-clause ::ignore-path)))
 
 (defn- normalize-expressions-tokens
-  "For expressions, we don't want to normalize the name of the expression; keep that as is, but make it a string;
+  "For expressions, we don't want to normalize the name of the expression; keep that as is, but make it a keyword;
    normalize the definitions as normal."
   [expressions-clause]
   (into {} (for [[expression-name definition] expressions-clause]
-             [(if (keyword? expression-name)
-                (u/keyword->qualified-name expression-name)
-                expression-name)
-              (normalize-tokens definition)])))
+             [(keyword expression-name)
+              (normalize-tokens definition ::ignore-path)])))
 
 (defn- normalize-order-by-tokens
   "Normalize tokens in the order-by clause, which can have different syntax when using MBQL 95 or 98
@@ -143,24 +141,40 @@
            ;; flip it back to put it back the way we found it.
            (reverse (normalize-mbql-clause-tokens (reverse subclause)))))))
 
+(defn- normalize-template-tags
+  "Normalize native-query template tags. Like `expressions` we want to preserve the original name rather than normalize
+  it."
+  [template-tags]
+  (into {} (for [[tag-name tag-def] template-tags]
+             [tag-name (normalize-tokens tag-def ::ignore-path)])))
+
 (def ^:private path->special-token-normalization-fn
   "Map of special functions that should be used to perform token normalization for a given path. For example, the
   `:expressions` key in an MBQL query should preserve the case of the expression names; this custom behavior is
   defined below."
   {:type   qputil/normalize-token
    ;; don't normalize native queries
-   :native {:query identity}
+   :native {:query         identity
+            :template-tags normalize-template-tags}
    :query  {:aggregation normalize-ag-clause-tokens
             :expressions normalize-expressions-tokens
             :order-by    normalize-order-by-tokens}})
 
 (defn- normalize-tokens
-  "Recursively normalize a query and return the canonical form of that query."
+  "Recursively normalize a query and return the canonical form of that query.
+
+  Every time this function recurses (thru a map value) it adds a new (normalized) key to key path, e.g. `path` will be
+  `[:query :order-by]` when we're in the MBQL order-by clause. If we need to handle these top-level clauses in special
+  ways add a function to `path->special-token-normalization-fn` above.
+
+  In some cases, dealing with the path isn't desirable, but we don't want to accidentally trigger normalization
+  functions (such as accidentally normalizing the `:type` key in something other than the top-level of the query), so
+  by convention please pass `::ignore-path` to avoid accidentally triggering path functions."
   [x & [path]]
-  ;; every time this function recurses it adds a new (normalized) key to key path, e.g. `path` will be
-  ;; [:query :order-by] when we're in the MBQL order-by clause. If we need to handle these top-level clauses in special
-  ;; ways add a function to `path->special-token-normalization-fn` above.
-  (let [special-fn (when (seq path)
+  (let [path       (if (keyword? path)
+                     [path]
+                     (vec path))
+        special-fn (when (seq path)
                      (get-in path->special-token-normalization-fn path))]
     (cond
       (fn? special-fn)
@@ -183,9 +197,12 @@
       (normalize-mbql-clause-tokens x)
 
       ;; for non-mbql sequential collections (probably something like the subclauses of :order-by or something like
-      ;; that) recurse on all the args. This doesn't append anything to path... (should it?)
+      ;; that) recurse on all the args.
+      ;;
+      ;; To signify that we're recursing into a sequential collection, this appends `::sequence` to path; not being
+      ;; used yet, this is mainly in place to prevent accidental path-fn triggering
       (sequential? x)
-      (mapv normalize-tokens x)
+      (mapv #(normalize-tokens % (conj (vec path) ::sequence)) x)
 
       :else
       x)))
@@ -213,6 +230,13 @@
     (= ag-type :rows)
     nil
 
+    ;; For named aggregations (`[:named <ag> <name>]`) we want to leave as-is an just canonicalize the ag it names
+    (= ag-type :named)
+    (let [[_ ag ag-name] ag-subclause]
+      [:named (canonicalize-aggregation-subclause ag) ag-name])
+
+    (#(:+ :- :* :/) ag-type)
+
     field
     [ag-type (wrap-implicit-field-id field)]
 
@@ -231,7 +255,8 @@
     ;; special-case: MBQL 98 multiple aggregations using unwrapped :count or :rows
     ;; e.g. {:aggregations [:count [:sum 10]]} or {:aggregations [:count :count]}
     (and (mbql-clause? aggregations)
-         (aggregation-subclause? (second aggregations)))
+         (aggregation-subclause? (second aggregations))
+         (not= :named (first aggregations)))
     (reduce concat (map wrap-single-aggregations aggregations))
 
     ;; something like {:aggregations [:sum 10]} -- MBQL 95 single aggregation
@@ -385,4 +410,13 @@
 (def ^{:arglists '([outer-query])} normalize
   "Normalize the tokens in an MBQL query (i.e., make them all `lisp-case` keywords), rewrite deprecated clauses as
   up-to-date MBQL 98, and remove empty clauses."
-  (comp remove-empty-clauses canonicalize normalize-tokens))
+  (comp #(u/prog1 %
+           (println "NORMALIZED:" (u/pprint-to-str 'blue <>)) ; NOCOMMIT
+           )
+        remove-empty-clauses
+        canonicalize
+        normalize-tokens
+        #(u/prog1 %
+           (println "PRE-NORMALIZATION:" (u/pprint-to-str 'magenta <>)) ; NOCOMMIT
+           )
+        ))

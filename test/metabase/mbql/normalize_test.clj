@@ -65,12 +65,12 @@
 
 ;; are expression names exempt from lisp-casing/lower-casing?
 (expect
-  {:query {:expressions {"sales_tax" [:- [:field-id 10] [:field-id 20]]}}}
-  (#'normalize/normalize-tokens {"query" {"expressions" {"sales_tax" ["-" ["field-id" 10] ["field-id" 20]]}}}))
+  {:query {:expressions {:sales_tax [:- [:field-id 10] [:field-id 20]]}}}
+  (#'normalize/normalize-tokens {"query" {"expressions" {:sales_tax ["-" ["field-id" 10] ["field-id" 20]]}}}))
 
-;; expression names should always be strings
+;; expression names should always be keywords
 (expect
-  {:query {:expressions {"sales_tax" [:- [:field-id 10] [:field-id 20]]}}}
+  {:query {:expressions {:sales_tax [:- [:field-id 10] [:field-id 20]]}}}
   (#'normalize/normalize-tokens {"query" {"expressions" {:sales_tax ["-" ["field-id" 10] ["field-id" 20]]}}}))
 
 ;; expression references should be exempt too
@@ -145,6 +145,33 @@
   {:query {:filter [:starts-with 10 "ABC" {:case-sensitive true}]}}
   (#'normalize/normalize-tokens {:query {"FILTER" ["starts_with" 10 "ABC" {"case_sensitive" true}]}}))
 
+;; make sure we're not running around trying to normalize the type in native query params
+(expect
+  {:type       :native
+   :parameters [{:type   "date/range"
+                 :target [:dimension [:template-tag "checkin_date"]]
+                 :value  "2015-04-01~2015-05-01"}]}
+  (#'normalize/normalize-tokens {:type       :native
+                                 :parameters [{:type   "date/range"
+                                               :target [:dimension [:template-tag "checkin_date"]]
+                                               :value  "2015-04-01~2015-05-01"}]}))
+
+;; oh yeah, also we don't want to go around trying to normalize template-tag names
+(expect
+  {:type   :native
+   :native {:query         "SELECT COUNT(*) FROM \"PUBLIC\".\"CHECKINS\" WHERE {{checkin_date}}"
+            :template-tags {:checkin_date {:name         "checkin_date"
+                                           :display_name "Checkin Date"
+                                           :type         "dimension",
+                                           :dimension    [:field-id 14]}}}}
+  (#'normalize/normalize-tokens
+   {:type   "native"
+    :native {:query         "SELECT COUNT(*) FROM \"PUBLIC\".\"CHECKINS\" WHERE {{checkin_date}}"
+             :template_tags {:checkin_date {:name         "checkin_date"
+                                            :display_name "Checkin Date"
+                                            :type         "dimension",
+                                            :dimension    ["field-id" 14]}}}}))
+
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                                  CANONICALIZE                                                  |
@@ -210,6 +237,12 @@
 (expect
   {:query {:aggregation [[:count] [:sum [:field-id 10]] [:count [:field-id 20]] [:count]]}}
   (#'normalize/canonicalize {:query {:aggregation [:count [:sum 10] [:count 20] :count]}}))
+
+;; make sure we can deal with *named* aggregations!
+(expect
+  {:query {:aggregation [:named [:sum [:field-id 10]] "Sum *TEN*"]}}
+  (#'normalize/canonicalize {:query {:aggregation [:named [:sum 10] "Sum *TEN*"]}}))
+
 
 ;; implicit Field IDs should get wrapped in [:field-id] in :breakout
 (expect
