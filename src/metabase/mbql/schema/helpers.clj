@@ -55,6 +55,7 @@
 
 ;;; ----------------------------------------------------- one-of -----------------------------------------------------
 
+;; TODO - consider using impl in `mbql.u` instead
 (defn is-clause?
   "True if `x` is a given MBQL clause.
 
@@ -79,4 +80,4 @@
     (one-of field-id field-literal)"
   [& clauses]
   `(one-of* ~@(for [clause clauses]
-                [(:clause-name (meta clause)) clause])))
+                [`(:clause-name (meta (var ~clause))) clause])))

@@ -444,7 +444,8 @@
   nil
   :load-ns true)
 
-(s/defrecord ^:deprecated AggregationWithField [aggregation-type :- (s/named (s/enum :avg :count :cumulative-sum :distinct :max
+(s/defrecord ^:deprecated AggregationWithField [aggregation-type :- (s/named (s/enum :avg :count :cumulative-count
+                                                                                     :cumulative-sum :distinct :max
                                                                                      :min :stddev :sum)
                                                                              "Valid aggregation type")
                                                 field            :- (s/cond-pre AnyField

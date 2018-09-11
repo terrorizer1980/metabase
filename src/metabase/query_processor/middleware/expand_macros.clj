@@ -21,6 +21,8 @@
 ;;; |                                                    UTIL FNS                                                    |
 ;;; +----------------------------------------------------------------------------------------------------------------+
 
+;; TODO - this is duplicated in a few places in the code base, consider moving somewhere like a new `mbql.util`
+;; namespace
 (defn- is-clause? [clause-names object]
   (and (sequential? object)
        ((some-fn string? keyword?) (first object))

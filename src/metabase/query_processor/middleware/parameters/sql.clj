@@ -6,7 +6,9 @@
   (:require [clojure.string :as str]
             [honeysql.core :as hsql]
             [medley.core :as m]
-            [metabase.driver :as driver]
+            [metabase
+             [driver :as driver]
+             [util :as u]]
             [metabase.driver.generic-sql :as sql]
             [metabase.models.field :as field :refer [Field]]
             [metabase.query-processor.middleware.expand :as ql]
@@ -69,7 +71,7 @@
   (instance? NoValue x))
 
 (def ^:private ParamType
-  (s/enum "number" "dimension" "text" "date"))
+  (s/enum :number :dimension :text :date))
 
 ;; various schemas are used to check that various functions return things in expected formats
 
@@ -77,20 +79,20 @@
 ;; "FieldFilter" clause like Dimensions
 ;;
 ;; Since 'Dimension' (Field Filters) are considered their own `:type`, to *actually* store the type of a Dimension
-;; look at the key `:widget_type`. This applies to things like the default value for a Dimension as well.
+;; look at the key `:widget-type`. This applies to things like the default value for a Dimension as well.
 (def ^:private TagParam
   "Schema for values passed in as part of the `:template-tags` list."
   {(s/optional-key :id)          su/NonBlankString ; this is used internally by the frontend
    :name                         su/NonBlankString
-   :display_name                 su/NonBlankString
+   :display-name                 su/NonBlankString
    :type                         ParamType
    (s/optional-key :dimension)   [s/Any]
-   (s/optional-key :widget_type) su/NonBlankString ; type of the [default] value if `:type` itself is `dimension`
+   (s/optional-key :widget-type) s/Keyword ; type of the [default] value if `:type` itself is `dimension`
    (s/optional-key :required)    s/Bool
    (s/optional-key :default)     s/Any})
 
 (def ^:private DimensionValue
-  {:type                     su/NonBlankString
+  {:type                     s/Keyword ; TODO - what types are allowed? :text, ...?
    :target                   s/Any
    ;; not specified if the param has no value. TODO - make this stricter
    (s/optional-key :value)   s/Any
@@ -161,8 +163,8 @@
   "Return the default value for a Dimension (Field Filter) param defined by the map TAG, if one is set."
   [tag :- TagParam]
   (when-let [default (:default tag)]
-    {:type   (:widget_type tag "dimension")             ; widget_type is the actual type of the default value if set
-     :target ["dimension" ["template-tag" (:name tag)]]
+    {:type   (:widget-type tag :dimension)             ; widget-type is the actual type of the default value if set
+     :target [:dimension [:template-tag (:name tag)]]
      :value  default}))
 
 (s/defn ^:private dimension->field-id :- su/IntGreaterThanZero
@@ -180,7 +182,7 @@
                                                              (dimension->field-id dimension))))))
                      :param (or
                              ;; look in the sequence of params we were passed to see if there's anything that matches
-                             (param-with-target params ["dimension" ["template-tag" (:name tag)]])
+                             (param-with-target params [:dimension [:template-tag (:name tag)]])
                              ;; if not, check and see if we have a default param
                              (default-value-for-dimension tag))})))
 
@@ -188,8 +190,8 @@
 ;;; Non-Dimension Params (e.g. WHERE x = {{x}})
 
 (s/defn ^:private param-value-for-tag [tag :- TagParam, params :- (s/maybe [DimensionValue])]
-  (when (not= (:type tag) "dimension")
-    (:value (param-with-target params ["variable" ["template-tag" (:name tag)]]))))
+  (when (not= (:type tag) :dimension)
+    (:value (param-with-target params [:variable [:template-tag (:name tag)]]))))
 
 (s/defn ^:private default-value-for-tag
   "Return the `:default` value for a param if no explicit values were passsed. This only applies to non-Dimension
@@ -253,21 +255,21 @@
     (no-value? value)
     value
 
-    (= param-type "number")
+    (= param-type :number)
     (value->number value)
 
-    (= param-type "date")
+    (= param-type :date)
     (map->Date {:s value})
 
-    (and (= param-type "dimension")
-         (= (get-in value [:param :type]) "number"))
+    (and (= param-type :dimension)
+         (= (get-in value [:param :type]) :number))
     (update-in value [:param :value] value->number)
 
     (sequential? value)
     (map->MultipleValues {:values (for [v value]
                                     (parse-value-for-type param-type v))})
 
-    (and (= param-type "dimension")
+    (and (= param-type :dimension)
          (get-in value [:field :base_type])
          (string? (get-in value [:param :value])))
     (update-in value [:param :value] (partial parse-value-for-field-base-type (get-in value [:field :base_type])))
@@ -291,8 +293,8 @@
      (query->params-map some-query)
       ->
       {:checkin_date {:field {:name \"date\", :parent_id nil, :table_id 1375}
-                      :param {:type   \"date/range\"
-                              :target [\"dimension\" [\"template-tag\" \"checkin_date\"]]
+                      :param {:type   :date/range
+                              :target [:dimension [:template-tag \"checkin_date\"]]
                               :value  \"2015-01-01~2016-09-01\"}}}"
   [{{tags :template-tags} :native, params :parameters}]
   (into {} (for [[k tag] tags
@@ -323,10 +325,10 @@
 
 
 (defn- relative-date-param-type? [param-type]
-  (contains? #{"date/range" "date/month-year" "date/quarter-year" "date/relative" "date/all-options"} param-type))
+  (contains? #{:date/range :date/month-year :date/quarter-year :date/relative :date/all-options} param-type))
 
 (defn- date-param-type? [param-type]
-  (str/starts-with? param-type "date/"))
+  (= "date" (namespace param-type)))
 
 ;; for relative dates convert the param to a `DateRange` record type and call `->replacement-snippet-info` on it
 (s/defn ^:private relative-date-dimension-value->replacement-snippet-info :- ParamSnippetInfo
@@ -576,7 +578,7 @@
 (defn expand
   "Expand parameters inside a *SQL* QUERY."
   [query]
-  (binding [*driver*   (ensure-driver query)]
+  (binding [*driver* (ensure-driver query)]
     (if (driver/driver-supports? *driver* :native-query-params)
       (update query :native expand-query-params (query->params-map query))
       query)))

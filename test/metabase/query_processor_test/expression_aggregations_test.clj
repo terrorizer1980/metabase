@@ -200,12 +200,9 @@
                                 :definition {:aggregation [:sum [:field-id (data/id :venues :price)]]
                                              :filter      [:> [:field-id (data/id :venues :price)] 1]}}]
     (format-rows-by [int int]
-      (rows (qp/process-query
-              {:database (data/id)
-               :type     :query
-               :query    {:source-table (data/id :venues)
-                          :aggregation  [:+ ["METRIC" (u/get-id metric)] 1]
-                          :breakout     [[:field-id (data/id :venues :price)]]}})))))
+      (rows (data/run-mbql-query venues
+              {:aggregation [:+ ["METRIC" (u/get-id metric)] 1]
+               :breakout    [[:field-id $price]]})))))
 
 ;; check that we can handle METRICS (ick) inside a NAMED clause
 (datasets/expect-with-engines (non-timeseries-engines-with-feature :expression-aggregations)
@@ -218,12 +215,9 @@
                                 :definition {:aggregation [:sum [:field-id (data/id :venues :price)]]
                                              :filter      [:> [:field-id (data/id :venues :price)] 1]}}]
     (format-rows-by [int int]
-      (rows+column-names (qp/process-query
-                           {:database (data/id)
-                            :type     :query
-                            :query    {:source-table (data/id :venues)
-                                       :aggregation  [[:named ["METRIC" (u/get-id metric)] "My Cool Metric"]]
-                                       :breakout     [[:field-id (data/id :venues :price)]]}})))))
+      (rows+column-names (data/run-mbql-query venues
+                           {:aggregation  [[:named ["METRIC" (u/get-id metric)] "My Cool Metric"]]
+                            :breakout     [[:field-id $price]]})))))
 
 ;; check that METRICS (ick) with a nested aggregation still work inside a NAMED clause
 (datasets/expect-with-engines (non-timeseries-engines-with-feature :expression-aggregations)

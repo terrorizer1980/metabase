@@ -114,7 +114,7 @@
     (rows (qp/process-query {:database   (data/id)
                              :type       :native
                              :native     {:query         "SELECT * FROM users WHERE {{user}}"
-                                          :template_tags {:user {:name         "user"
+                                          :template-tags {:user {:name         "user"
                                                                  :display_name "User ID"
                                                                  :type         "dimension"
                                                                  :dimension    ["field-id" (data/id :users :user_id)]}}}

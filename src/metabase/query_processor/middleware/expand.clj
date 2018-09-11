@@ -191,8 +191,9 @@
 
 (s/defn ^:deprecated ^:ql cum-count :- i/Aggregation
   "Aggregation clause. Return the cumulative row count (presumably broken out in some way)."
-  []
-  (i/map->AggregationWithoutField {:aggregation-type :cumulative-count}))
+  ([]
+   (i/map->AggregationWithoutField {:aggregation-type :cumulative-count}))
+  ([f] (ag-with-field :cumulative-count f)))
 
 (defn ^:deprecated ^:ql ^:deprecated rows
   "Bare rows aggregation. This is the default behavior, so specifying it is deprecated."
@@ -564,7 +565,7 @@
     (apply (fn-for-token token) args)
     sexpr))
 
-(defn- ^:deprecated walk-expand-ql-sexprs
+(defn ^:deprecated walk-expand-ql-sexprs
   "Walk QUERY depth-first and expand QL bracketed S-expressions."
   [x]
   (cond (map? x)        (into x (for [[k v] x]                    ; do `into x` instead of `into {}` so we can keep the original class,

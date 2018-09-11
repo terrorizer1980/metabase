@@ -72,6 +72,10 @@
 (defclause min,       field Field)
 (defclause max,       field Field)
 
+;; Metrics are just 'macros' (placeholders for other aggregations) that get expanded to some other aggregation in the
+;; expand-macros middleware
+(defclause metric, metric-id su/IntGreaterThanZero)
+
 ;; the following are definitions for expression aggregations, e.g. [:+ [:sum [:field-id 10]] [:sum [:field-id 20]]]
 
 (declare UnnamedAggregation)
@@ -79,15 +83,16 @@
 (def ^:private ExpressionAggregationArg
   (s/if number?
     s/Num
-    UnnamedAggregation))
+    (s/recursive #'UnnamedAggregation)))
 
-(defclause [ag:+   +],  x ExpressionAggregationArg, y ExpressionAggregationArg)
-(defclause [ag:-   -],  x ExpressionAggregationArg, y ExpressionAggregationArg)
-(defclause [ag:*   *],  x ExpressionAggregationArg, y ExpressionAggregationArg)
-(defclause [ag:div /],  x ExpressionAggregationArg, y ExpressionAggregationArg) ; ag:/ isn't a valid token
+(defclause [ag:+   +],  x ExpressionAggregationArg, y ExpressionAggregationArg, more (rest ExpressionAggregationArg))
+(defclause [ag:-   -],  x ExpressionAggregationArg, y ExpressionAggregationArg, more (rest ExpressionAggregationArg))
+(defclause [ag:*   *],  x ExpressionAggregationArg, y ExpressionAggregationArg, more (rest ExpressionAggregationArg))
+(defclause [ag:div /],  x ExpressionAggregationArg, y ExpressionAggregationArg, more (rest ExpressionAggregationArg))
+;; ag:/ isn't a valid token
 
 (def ^:private UnnamedAggregation
-  (one-of count avg cum-count cum-sum distinct stddev sum min max ag:+ ag:- ag:* ag:div))
+  (one-of count avg cum-count cum-sum distinct stddev sum min max ag:+ ag:- ag:* ag:div metric))
 
 ;; any sort of aggregation can be wrapped in a `[:named <ag> <custom-name>]` clause, but you cannot wrap a `:named` in
 ;; a `:named`
@@ -211,21 +216,32 @@
 
 (declare MBQLQuery)
 
+;; TODO - schemas for template tags and dimensions live in `metabase.query-processor.middleware.parameters.sql`. Move
+;; them here when we get the chance.
+
+(def ^:private TemplateTag
+  s/Any) ; s/Any for now until we move over the stuff from the parameters middleware
+
+(def NativeQuery
+  "Schema for a valid, normalized native [inner] query."
+  {:native                         s/Any
+   (s/optional-key :template-tags) {s/Keyword TemplateTag}}) ; TODO - I think template tag keys should be strings
+
+
 (def ^:private SourceQuery
   "Schema for a valid value for a `:source-query` clause."
   (s/if :native
-    {:native                         s/Any
-     (s/optional-key :template-tags) s/Any}
+    NativeQuery
     (s/recursive #'MBQLQuery)))
 
 (def MBQLQuery
-  "Schema for a valid, normalized MBQL query."
+  "Schema for a valid, normalized MBQL [inner] query."
   (s/constrained
    {(s/optional-key :source-query) SourceQuery
     (s/optional-key :source-table) su/IntGreaterThanZero
     (s/optional-key :aggregation)  [Aggregation]
     (s/optional-key :breakout)     [Field]
-    (s/optional-key :expressions)  {s/Keyword ExpressionDef}
+    (s/optional-key :expressions)  {s/Keyword ExpressionDef} ; TODO - I think expressions keys should be strings
     (s/optional-key :fields)       [Field]
     (s/optional-key :filter)       Filter
     (s/optional-key :limit)        su/IntGreaterThanZero
@@ -235,3 +251,22 @@
    (fn [query]
      (core/= 1 (core/count (select-keys query [:source-query :source-table]))))
    "Query must specify either `:source-table` or `:source-query`, but not both."))
+
+(def ^:private Parameter
+  "Schema for a valid, normalized query parameter."
+  s/Any) ; s/Any for now until we move over the stuff from the parameters middleware
+
+(def Query
+  "Schema for an [outer] query, e.g. the sort of thing you'd pass to the query processor or save in
+  `Card.dataset_query`."
+  (s/constrained
+   {:database                    su/IntGreaterThanZero
+    :type                        (s/enum :query :native)
+    (s/optional-key :native)     NativeQuery
+    (s/optional-key :query)      MBQLQuery
+    (s/optional-key :parameters) [Parameter]}
+   (fn [{native :native, mbql :query, query-type :type}]
+     (case query-type
+       :native (and native (not mbql))
+       :query  (and mbql   (not native))))
+   "Native queries should specify `:native` but not `:query`; MBQL queries should specify `:query` but not `:native`."))

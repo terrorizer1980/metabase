@@ -91,14 +91,14 @@
   (with-tz-db
     (tu/with-temporary-setting-values [report-timezone "America/Los_Angeles"]
       (process-query'
-       {:database (data/id)
-        :type :native
+       {:database   (data/id)
+        :type       :native
         :native     {:query         (format "select %s, %s, %s from %s where cast(last_login as date) between {{date1}} and {{date2}}"
                                             (field-identifier :users :id)
                                             (field-identifier :users :name)
                                             (field-identifier :users :last_login)
                                             (users-table-identifier))
-                     :template_tags {:date1 {:name "date1" :display_name "Date1" :type "date" }
+                     :template-tags {:date1 {:name "date1" :display_name "Date1" :type "date" }
                                      :date2 {:name "date2" :display_name "Date2" :type "date" }}}
         :parameters [{:type "date/single" :target ["variable" ["template-tag" "date1"]] :value "2014-08-02T02:00:00.000000"}
                      {:type "date/single" :target ["variable" ["template-tag" "date2"]] :value "2014-08-02T06:00:00.000000"}]}))))
@@ -109,14 +109,14 @@
   (with-tz-db
     (tu/with-temporary-setting-values [report-timezone "America/Los_Angeles"]
       (process-query'
-       {:database (data/id)
-        :type :native
+       {:database   (data/id)
+        :type       :native
         :native     {:query         (format "select %s, %s, %s from %s where {{ts_range}}"
                                             (field-identifier :users :id)
                                             (field-identifier :users :name)
                                             (field-identifier :users :last_login)
                                             (users-table-identifier))
-                     :template_tags {:ts_range {:name "ts_range", :display_name "Timestamp Range", :type "dimension",
+                     :template-tags {:ts_range {:name      "ts_range", :display_name "Timestamp Range", :type "dimension",
                                                 :dimension ["field-id" (data/id :users :last_login)]}}}
         :parameters [{:type "date/range", :target ["dimension" ["template-tag" "ts_range"]], :value "2014-08-02~2014-08-03"}]}))))
 
@@ -133,7 +133,7 @@
                                             (field-identifier :users :name)
                                             (field-identifier :users :last_login)
                                             (users-table-identifier))
-                     :template_tags {:just_a_date {:name "just_a_date", :display_name "Just A Date", :type "dimension",
+                     :template-tags {:just_a_date {:name "just_a_date", :display_name "Just A Date", :type "dimension",
                                                    :dimension ["field-id" (data/id :users :last_login)]}}}
         :parameters [{:type "date/single", :target ["dimension" ["template-tag" "just_a_date"]], :value "2014-08-02"}]}))))
 

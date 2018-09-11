@@ -108,7 +108,7 @@
                                                    (quoted-identifier :venues :name)
                                                    (quoted-identifier :venues :latitude)
                                                    (quoted-identifier :venues))}
-                    :order-by     [:asc [:field-literal (keyword (data/format-name :id)) :type/Integer]]
+                    :order-by     [[:asc [:field-literal (data/format-name :id) :type/Integer]]]
                     :limit        5}}))))
 
 
@@ -392,7 +392,7 @@
   (tt/with-temp Card [card {:dataset_query {:database (data/id)
                                             :type     :native
                                             :native   {:query         "SELECT * FROM PRODUCTS WHERE CATEGORY = {{category}} LIMIT 10"
-                                                       :template_tags {:category {:name         "category"
+                                                       :template-tags {:category {:name         "category"
                                                                                   :display_name "Category"
                                                                                   :type         "text"
                                                                                   :required     true

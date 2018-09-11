@@ -63,6 +63,26 @@
   {:query {:aggregation [:count [:sum 10] [:count 20] :count]}}
   (#'normalize/normalize-tokens {:query {:aggregation ["count" ["sum" 10] ["count" 20] "count"]}}))
 
+;; try an ag that is named
+(expect
+  {:query {:aggregation [:named [:sum 10] "My COOL AG"]}}
+  (#'normalize/normalize-tokens {:query {:aggregation ["named" ["SuM" 10] "My COOL AG"]}}))
+
+;; try an expression ag
+(expect
+  {:query {:aggregation [:+ [:sum 10] [:* [:sum 20] 3]]}}
+  (#'normalize/normalize-tokens {:query {:aggregation ["+" ["sum" 10] ["*" ["SUM" 20] 3]]}}))
+
+;; expression ags should handle varargs
+(expect
+  {:query {:aggregation [:+ [:sum 10] [:sum 20] [:sum 30]]}}
+  (#'normalize/normalize-tokens {:query {:aggregation ["+" ["sum" 10] ["SUM" 20] ["sum" 30]]}}))
+
+;; METRICS shouldn't get normalized in some kind of wacky way
+(expect
+  {:aggregation [:+ [:metric 10] 1]}
+  (#'normalize/normalize-tokens {:aggregation ["+" ["METRIC" 10] 1]}))
+
 ;; are expression names exempt from lisp-casing/lower-casing?
 (expect
   {:query {:expressions {:sales_tax [:- [:field-id 10] [:field-id 20]]}}}
@@ -161,8 +181,8 @@
   {:type   :native
    :native {:query         "SELECT COUNT(*) FROM \"PUBLIC\".\"CHECKINS\" WHERE {{checkin_date}}"
             :template-tags {:checkin_date {:name         "checkin_date"
-                                           :display_name "Checkin Date"
-                                           :type         "dimension",
+                                           :display-name "Checkin Date"
+                                           :type         "dimension"    ; TODO - should we normalize `:type` here?
                                            :dimension    [:field-id 14]}}}}
   (#'normalize/normalize-tokens
    {:type   "native"
@@ -171,6 +191,45 @@
                                             :display_name "Checkin Date"
                                             :type         "dimension",
                                             :dimension    ["field-id" 14]}}}}))
+
+;; native template tags `:type` should get normalized
+(expect
+  {:native {:query         "SELECT * FROM CATEGORIES WHERE {{names_list}}"
+            :template-tags {:names_list {:name         "names_list"
+                                         :display-name "Names List"
+                                         :type         :dimension
+                                         :dimension    [:field-id 49]}}}}
+  (#'normalize/normalize-tokens
+   {:native {:query          "SELECT * FROM CATEGORIES WHERE {{names_list}}"
+             "template_tags" {:names_list {:name         "names_list"
+                                           :display_name "Names List"
+                                           :type         "dimension"
+                                           :dimension    ["field-id" 49]}}}}))
+
+;; `:parameters` `:type` should get normalized, but `:value` should not.
+(expect
+  {:type       :native
+   :parameters [{:type   :text
+                 :target [:dimension [:template-tag "names_list"]]
+                 :value  ["BBQ" "Bakery" "Bar"]}]}
+  (#'normalize/normalize-tokens
+   {:type       "native"
+    :parameters [{:type   "text"
+                  :target ["dimension" ["template-tag" "names_list"]]
+                  :value  ["BBQ" "Bakery" "Bar"]}]}))
+
+;; make sure normalization doesn't try to parse value as an MBQL clause
+(expect
+  {:type       :native
+   :parameters [{:type   :text
+                 :target [:dimension [:template-tag "names_list"]]
+                 :value  ["=" 10 20]}]}
+  (#'normalize/normalize-tokens
+   {:type       "native"
+    :parameters [{:type   "text"
+                  :target ["dimension" ["template-tag" "names_list"]]
+                  :value  ["=" 10 20]}]}))
+
 
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
@@ -240,9 +299,36 @@
 
 ;; make sure we can deal with *named* aggregations!
 (expect
-  {:query {:aggregation [:named [:sum [:field-id 10]] "Sum *TEN*"]}}
+  {:query {:aggregation [[:named [:sum [:field-id 10]] "Sum *TEN*"]]}}
   (#'normalize/canonicalize {:query {:aggregation [:named [:sum 10] "Sum *TEN*"]}}))
 
+;; make sure expression aggregations work correctly
+(expect
+  {:query {:aggregation [[:+ [:sum [:field-id 10]] 2]]}}
+  (#'normalize/canonicalize {:query {:aggregation [:+ [:sum 10] 2]}}))
+
+(expect
+  {:query {:aggregation [[:+ [:sum [:field-id 10]] [:* [:sum [:field-id 20]] [:sum [:field-id 30]]]]]}}
+  (#'normalize/canonicalize {:query {:aggregation [:+ [:sum 10] [:* [:sum 20] [:sum 30]]]}}))
+
+;; expression ags should handle varargs
+(expect
+  {:query {:aggregation [[:+ [:sum [:field-id 10]] [:sum [:field-id 20]] [:sum [:field-id 30]]]]}}
+  (#'normalize/canonicalize {:query {:aggregation [[:+ [:sum 10] [:sum 20] [:sum 30]]]}}))
+
+;; METRICS shouldn't get canonicalized in some kind of wacky way
+(expect
+  {:query {:aggregation [[:+ [:metric 1] 2]]}}
+  (#'normalize/canonicalize {:query {:aggregation [:+ [:metric 1] 2]}}))
+
+;; can cumulative-count be handled with or without a Field?
+(expect
+  {:query {:aggregation [[:cum-count]]}}
+  (#'normalize/canonicalize {:query {:aggregation [:cum-count]}}))
+
+(expect
+  {:query {:aggregation [[:cum-count [:field-id 10]]]}}
+  (#'normalize/canonicalize {:query {:aggregation [:cum-count 10]}}))
 
 ;; implicit Field IDs should get wrapped in [:field-id] in :breakout
 (expect
@@ -277,9 +363,7 @@
 
 (expect
   {:query {:filter [:and [:= [:field-id 10] 20] [:= [:field-id 20] 30]]}}
-  (#'normalize/canonicalize {:query {:filter [:and
-                                                      [:= 10 20]
-                                                      [:= 20 30]]}}))
+  (#'normalize/canonicalize {:query {:filter [:and [:= 10 20] [:= 20 30]]}}))
 
 (expect
   {:query {:filter [:between [:field-id 10] 20 30]}}
@@ -348,6 +432,11 @@
   {:query {:filter [:= [:field-literal "my_field" "type/Number"] 10]}}
   (#'normalize/canonicalize {:query {:filter [:= [:field-id [:field-literal "my_field" "type/Number"]] 10]}}))
 
+;; we should fix :field-ids inside :field-ids too
+(expect
+  {:query {:filter [:= [:field-id 1] 10]}}
+  (#'normalize/canonicalize {:query {:filter [:= [:field-id [:field-id 1]] 10]}}))
+
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                              REMOVE EMPTY CLAUSES                                              |
@@ -395,3 +484,23 @@
                                 "breakout"     [10 20]
                                 "filter"       ["and" ["=" 10 ["datetime-field" 20 "as" "day"]]]
                                 "order-by"     [[10 "desc"]]}}))
+
+;; let's try doing the full normalization on a native query w/ params
+(expect
+  {:native     {:query         "SELECT * FROM CATEGORIES WHERE {{names_list}}"
+                :template-tags {:names_list {:name         "names_list"
+                                             :display-name "Names List"
+                                             :type         :dimension
+                                             :dimension    [:field-id 49]}}}
+   :parameters [{:type   :text
+                 :target [:dimension [:template-tag "names_list"]]
+                 :value  ["BBQ" "Bakery" "Bar"]}]}
+  (normalize/normalize
+   {:native     {:query          "SELECT * FROM CATEGORIES WHERE {{names_list}}"
+                 "template_tags" {:names_list {:name         "names_list"
+                                               :display_name "Names List"
+                                               :type         "dimension"
+                                               :dimension    ["field-id" 49]}}}
+    :parameters [{:type   "text"
+                  :target ["dimension" ["template-tag" "names_list"]]
+                  :value  ["BBQ" "Bakery" "Bar"]}]}))

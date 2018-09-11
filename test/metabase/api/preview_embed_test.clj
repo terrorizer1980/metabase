@@ -55,7 +55,7 @@
     (embed-test/with-temp-card [card {:dataset_query
                                       {:database (data/id)
                                        :type     :native
-                                       :native   {:template_tags {:a {:type "date", :name "a", :display_name "a"}
+                                       :native   {:template-tags {:a {:type "date", :name "a", :display_name "a"}
                                                                   :b {:type "date", :name "b", :display_name "b"}
                                                                   :c {:type "date", :name "c", :display_name "c"}
                                                                   :d {:type "date", :name "d", :display_name "d"}}}}}]
@@ -358,7 +358,7 @@
     (tt/with-temp Card [card {:dataset_query {:database (data/id)
                                               :type     :native
                                               :native   {:query         "SELECT {{num}} AS num"
-                                                         :template_tags {:num {:name         "num"
+                                                         :template-tags {:num {:name         "num"
                                                                                :display_name "Num"
                                                                                :type         "number"
                                                                                :required     true

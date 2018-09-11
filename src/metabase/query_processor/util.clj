@@ -42,8 +42,8 @@
 
 ;;; ------------------------------------------------- Normalization --------------------------------------------------
 
-;; TODO - move this to `mbql.normalize`
-(s/defn normalize-token :- s/Keyword
+;; TODO - this has been moved to `metabase.mbql.util`; use that implementation instead.
+(s/defn ^:deprecated normalize-token :- s/Keyword
   "Convert a string or keyword in various cases (`lisp-case`, `snake_case`, or `SCREAMING_SNAKE_CASE`) to a lisp-cased
   keyword."
   [token :- su/KeywordOrString]
@@ -51,6 +51,8 @@
       str/lower-case
       (str/replace #"_" "-")
       keyword))
+
+;; All this stuff is deprecated because we're only dealing with normalize queries now
 
 (defn ^:deprecated get-normalized
   "Get the value for normalized key K in map M, regardless of how the key was specified in M,

@@ -151,7 +151,7 @@
             :type :native,
             :settings {:report-timezone "UTC"}
             :native     {:query "SELECT cast({{date}} as date)"
-                         :template_tags {:date {:name "date" :display_name "Date" :type "date" }}}
+                         :template-tags {:date {:name "date" :display_name "Date" :type "date" }}}
             :parameters [{:type "date/single" :target ["variable" ["template-tag" "date"]] :value "2018-04-18"}]}))))))
 
 ;; This tests a similar scenario, but one in which the JVM timezone is in Hong Kong, but the report timezone is in Los
@@ -174,5 +174,5 @@
              :type :native,
              :settings {:report-timezone "UTC"}
              :native     {:query "SELECT cast({{date}} as date)"
-                          :template_tags {:date {:name "date" :display_name "Date" :type "date" }}}
+                          :template-tags {:date {:name "date" :display_name "Date" :type "date" }}}
              :parameters [{:type "date/single" :target ["variable" ["template-tag" "date"]] :value "2018-04-18"}]}))))))

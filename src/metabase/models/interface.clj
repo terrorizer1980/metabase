@@ -1,6 +1,7 @@
 (ns metabase.models.interface
   (:require [cheshire.core :as json]
             [clojure.core.memoize :as memoize]
+            [metabase.mbql.normalize :as normalize]
             [metabase.util :as u]
             [metabase.util
              [cron :as cron-util]
@@ -46,6 +47,10 @@
 (models/add-type! :json-no-keywordization
   :in  json-in
   :out json-out-without-keywordization)
+
+(models/add-type! :mbql
+  :in json-in
+  :out (comp normalize/normalize json-out-with-keywordization))
 
 ;; json-set is just like json but calls `set` on it when coming out of the DB. Intended for storing things like a
 ;; permissions set

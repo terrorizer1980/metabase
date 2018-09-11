@@ -20,13 +20,8 @@
   Token normalization occurs first, followed by canonicalization, followed by removing empty clauses."
   (:require [clojure.walk :as walk]
             [medley.core :as m]
-            ;; TODO - we should move `normalize-token` into this namespace.
-            [metabase.query-processor.util :as qputil]
+            [metabase.mbql.util :as mbql.u]
             [metabase.util :as u]))
-
-(defn- mbql-clause? [x]
-  (and (sequential? x)
-       ((some-fn keyword? string?) (first x))))
 
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
@@ -55,9 +50,9 @@
   "Datetime fields look like `[:datetime-field <field> <unit>]` or `[:datetime-field <field> :as <unit>]`; normalize the
   unit, and `:as` (if present) tokens, and the Field."
   ([_ field unit]
-   [:datetime-field (normalize-tokens field ::ignore-path) (qputil/normalize-token unit)])
+   [:datetime-field (normalize-tokens field ::ignore-path) (mbql.u/normalize-token unit)])
   ([_ field _ unit]
-   [:datetime-field (normalize-tokens field ::ignore-path) :as (qputil/normalize-token unit)]))
+   [:datetime-field (normalize-tokens field ::ignore-path) :as (mbql.u/normalize-token unit)]))
 
 (defn- normalize-time-interval-tokens
   "`time-interval`'s `unit` should get normalized, and `amount` if it's not an integer."
@@ -66,8 +61,8 @@
    (normalize-tokens field ::ignore-path)
    (if (integer? amount)
      amount
-     (qputil/normalize-token amount))
-   (qputil/normalize-token unit)])
+     (mbql.u/normalize-token amount))
+   (mbql.u/normalize-token unit)])
 
 (defn- normalize-relative-datetime-tokens
   "Normalize a `relative-datetime` clause. `relative-datetime` comes in two flavors:
@@ -77,7 +72,7 @@
   ([_ _]
    [:relative-datetime :current])
   ([_ amount unit]
-   [:relative-datetime amount (qputil/normalize-token unit)]))
+   [:relative-datetime amount (mbql.u/normalize-token unit)]))
 
 (def ^:private mbql-clause->special-token-normalization-fn
   "Special fns to handle token normalization for different MBQL clauses."
@@ -92,7 +87,7 @@
   args are left as-is. If we need to do something special on top of that implement a fn in
   `mbql-clause->special-token-normalization-fn` above to handle the special normalization rules"
   [[clause-name & args]]
-  (let [clause-name (qputil/normalize-token clause-name)]
+  (let [clause-name (mbql.u/normalize-token clause-name)]
     (if-let [f (mbql-clause->special-token-normalization-fn clause-name)]
       (apply f clause-name args)
       (vec (cons clause-name (map #(normalize-tokens % ::ignore-path) args))))))
@@ -100,8 +95,8 @@
 
 (defn- aggregation-subclause? [x]
   (or (when ((some-fn keyword? string?) x)
-        (#{:avg :count :cum-count :distinct :stddev :sum :min :max} (qputil/normalize-token x)))
-      (when (mbql-clause? x)
+        (#{:avg :count :cum-count :distinct :stddev :sum :min :max :+ :- :/ :*} (mbql.u/normalize-token x)))
+      (when (mbql.u/mbql-clause? x)
         (aggregation-subclause? (first x)))))
 
 (defn- normalize-ag-clause-tokens
@@ -111,12 +106,17 @@
   (cond
     ;; something like {:aggregations :count}
     ((some-fn keyword? string?) ag-clause)
-    (qputil/normalize-token ag-clause)
+    (mbql.u/normalize-token ag-clause)
+
+    ;; named aggregation ([:named <ag> <name>])
+    (mbql.u/is-clause? :named ag-clause)
+    (let [[_ ag ag-name] ag-clause]
+      [:named (normalize-ag-clause-tokens ag) ag-name])
 
     ;; something wack like {:aggregations [:count [:sum 10]]} or {:aggregations [:count :count]}
-    (when (mbql-clause? ag-clause)
+    (when (mbql.u/mbql-clause? ag-clause)
       (aggregation-subclause? (second ag-clause)))
-    (map normalize-ag-clause-tokens ag-clause)
+    (mapv normalize-ag-clause-tokens ag-clause)
 
     :else
     (normalize-tokens ag-clause ::ignore-path)))
@@ -134,7 +134,7 @@
   rules (`[<field> :asc]` vs `[:asc <field>]`, for example)."
   [clauses]
   (vec (for [subclause clauses]
-         (if (mbql-clause? subclause)
+         (if (mbql.u/mbql-clause? subclause)
            ;; MBQL 98 [direction field] style: normalize as normal
            (normalize-mbql-clause-tokens subclause)
            ;; otherwise it's MBQL 95 [field direction] style: flip the args and *then* normalize the clause. And then
@@ -146,19 +146,28 @@
   it."
   [template-tags]
   (into {} (for [[tag-name tag-def] template-tags]
-             [tag-name (normalize-tokens tag-def ::ignore-path)])))
+             [(keyword tag-name)
+              (-> (normalize-tokens tag-def ::ignore-path)
+                  (update :type        mbql.u/normalize-token)
+                  (update :widget-type #(when % (mbql.u/normalize-token %))))])))
+
+(defn- normalize-query-parameter [param]
+  (-> param
+      (update :type mbql.u/normalize-token)
+      (update :target #(normalize-tokens % ::ignore-path))))
 
 (def ^:private path->special-token-normalization-fn
   "Map of special functions that should be used to perform token normalization for a given path. For example, the
   `:expressions` key in an MBQL query should preserve the case of the expression names; this custom behavior is
   defined below."
-  {:type   qputil/normalize-token
+  {:type   mbql.u/normalize-token
    ;; don't normalize native queries
    :native {:query         identity
             :template-tags normalize-template-tags}
    :query  {:aggregation normalize-ag-clause-tokens
             :expressions normalize-expressions-tokens
-            :order-by    normalize-order-by-tokens}})
+            :order-by    normalize-order-by-tokens}
+   :parameters {::sequence normalize-query-parameter}})
 
 (defn- normalize-tokens
   "Recursively normalize a query and return the canonical form of that query.
@@ -189,18 +198,17 @@
       ;; Each recursive call appends to the keypath above so we can handle top-level clauses in a special way if needed
       (map? x)
       (into {} (for [[k v] x
-                     :let  [k (qputil/normalize-token k)]]
+                     :let  [k (mbql.u/normalize-token k)]]
                  [k (normalize-tokens v (conj (vec path) k))]))
 
       ;; MBQL clauses handled above because of special cases
-      (mbql-clause? x)
+      (mbql.u/mbql-clause? x)
       (normalize-mbql-clause-tokens x)
 
       ;; for non-mbql sequential collections (probably something like the subclauses of :order-by or something like
       ;; that) recurse on all the args.
       ;;
-      ;; To signify that we're recursing into a sequential collection, this appends `::sequence` to path; not being
-      ;; used yet, this is mainly in place to prevent accidental path-fn triggering
+      ;; To signify that we're recursing into a sequential collection, this appends `::sequence` to path
       (sequential? x)
       (mapv #(normalize-tokens % (conj (vec path) ::sequence)) x)
 
@@ -225,7 +233,7 @@
 (defn- canonicalize-aggregation-subclause
   "Remove `:rows` type aggregation (long-since deprecated; simpliy means no aggregation) if present, and wrap
   `:field-ids` where appropriate."
-  [[ag-type field, :as ag-subclause]]
+  [[ag-type :as ag-subclause]]
   (cond
     (= ag-type :rows)
     nil
@@ -235,10 +243,23 @@
     (let [[_ ag ag-name] ag-subclause]
       [:named (canonicalize-aggregation-subclause ag) ag-name])
 
-    (#(:+ :- :* :/) ag-type)
+    (#{:+ :- :* :/} ag-type)
+    (vec
+     (cons
+      ag-type
+      ;; if args are also ag subclauses normalize those, but things like numbers are allowed too so leave them as-is
+      (for [arg (rest ag-subclause)]
+        (cond-> arg
+          (mbql.u/mbql-clause? arg) canonicalize-aggregation-subclause))))
 
-    field
-    [ag-type (wrap-implicit-field-id field)]
+    ;; for metric macros ([:metric <metric-id>]) do not wrap the metric ID in a :field-id clause
+    (= ag-type :metric)
+    ag-subclause
+
+    ;; something with an arg like [:sum [:field-id 41]]
+    (second ag-subclause)
+    (let [[_ field] ag-subclause]
+      [ag-type (wrap-implicit-field-id field)])
 
     :else
     ag-subclause))
@@ -254,13 +275,13 @@
 
     ;; special-case: MBQL 98 multiple aggregations using unwrapped :count or :rows
     ;; e.g. {:aggregations [:count [:sum 10]]} or {:aggregations [:count :count]}
-    (and (mbql-clause? aggregations)
+    (and (mbql.u/mbql-clause? aggregations)
          (aggregation-subclause? (second aggregations))
-         (not= :named (first aggregations)))
+         (not (mbql.u/is-clause? #{:named :+ :- :* :/} aggregations)))
     (reduce concat (map wrap-single-aggregations aggregations))
 
     ;; something like {:aggregations [:sum 10]} -- MBQL 95 single aggregation
-    (mbql-clause? aggregations)
+    (mbql.u/mbql-clause? aggregations)
     [(vec aggregations)]
 
     :else
@@ -338,7 +359,7 @@
    :field-id
    (fn [_ id]
      ;; if someone is dumb and does something like [:field-id [:field-literal ...]] be nice and fix it for them.
-     (if (mbql-clause? id)
+     (if (mbql.u/mbql-clause? id)
        id
        [:field-id id]))})
 
@@ -347,7 +368,7 @@
   [mbql-query]
   (walk/prewalk
    (fn [clause]
-     (if-not (mbql-clause? clause)
+     (if-not (mbql.u/mbql-clause? clause)
        clause
        (let [[clause-name & args] clause
              f                    (mbql-clause->canonicalization-fn clause-name)]
@@ -407,16 +428,18 @@
 ;;; |                                            PUTTING IT ALL TOGETHER                                             |
 ;;; +----------------------------------------------------------------------------------------------------------------+
 
+;; TODO - should have this validate against the MBQL schema afterwards, right? Maybe once we get closer to making this
+;; all mergable
 (def ^{:arglists '([outer-query])} normalize
   "Normalize the tokens in an MBQL query (i.e., make them all `lisp-case` keywords), rewrite deprecated clauses as
   up-to-date MBQL 98, and remove empty clauses."
-  (comp #(u/prog1 %
+  (comp #_#(u/prog1 %
            (println "NORMALIZED:" (u/pprint-to-str 'blue <>)) ; NOCOMMIT
            )
         remove-empty-clauses
         canonicalize
         normalize-tokens
-        #(u/prog1 %
+        #_#(u/prog1 %
            (println "PRE-NORMALIZATION:" (u/pprint-to-str 'magenta <>)) ; NOCOMMIT
            )
         ))

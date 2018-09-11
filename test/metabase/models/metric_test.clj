@@ -233,6 +233,6 @@
                                                :filter      ["AND" [">" 4 "2014-10-19"] ["=" 5 "yes"] ["OR" ["SEGMENT" 1] ["!=" 5 "5"]]]}}))
 
 (expect
-  {:Segment nil}
+  {:Segment #{}}
   (metric-dependencies Metric 12 {:definition {:aggregation nil
                                                :filter      nil}}))

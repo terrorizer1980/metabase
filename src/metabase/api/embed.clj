@@ -125,10 +125,10 @@
   (update dashboard-or-card :parameters remove-params-in-set (set (keys token-params))))
 
 (defn- template-tag-parameters
-  "Transforms native query's `template_tags` into `parameters`."
+  "Transforms native query's `template-tags` into `parameters`."
   [card]
   ;; NOTE: this should mirror `getTemplateTagParameters` in frontend/src/metabase/meta/Parameter.js
-  (for [[_ {tag-type :type, widget-type :widget_type, :as tag}] (get-in card [:dataset_query :native :template_tags])
+  (for [[_ {tag-type :type, widget-type :widget-type, :as tag}] (get-in card [:dataset_query :native :template-tags])
         :when                         (and tag-type
                                            (or widget-type (not= tag-type "dimension")))]
     {:id      (:id tag)

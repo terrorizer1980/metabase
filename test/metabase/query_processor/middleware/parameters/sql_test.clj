@@ -6,15 +6,16 @@
              [driver :as driver]
              [query-processor :as qp]
              [query-processor-test :as qpt :refer [first-row format-rows-by]]]
+            [metabase.mbql.normalize :as normalize]
             [metabase.models.database :refer [Database]]
-            [metabase.util.date :as du]
-            [metabase.query-processor.middleware.parameters.sql :as sql :refer :all]
+            [metabase.query-processor.middleware.parameters.sql :as sql]
             [metabase.test
              [data :as data]
              [util :as tu]]
             [metabase.test.data
              [datasets :as datasets]
              [generic-sql :as generic-sql]]
+            [metabase.util.date :as du]
             [toucan.db :as db]))
 
 ;;; ------------------------------------------ basic parser tests ------------------------------------------
@@ -102,6 +103,7 @@
 (expect
   java.lang.IllegalArgumentException
   (parse-template "select * from foo [[clause 1 {{bar}}]] [[clause 2" {:bar "foo"}))
+
 
 ;;; ------------------------------------------ simple substitution -- {{x}} ------------------------------------------
 
@@ -281,18 +283,18 @@
 ;; variable -- specified
 (expect
   "2"
-  (#'sql/value-for-tag {:name "id", :display_name "ID", :type "text", :required true, :default "100"}
-                       [{:type "category", :target ["variable" ["template-tag" "id"]], :value "2"}]))
+  (#'sql/value-for-tag {:name "id", :display-name "ID", :type :text, :required true, :default "100"}
+                       [{:type :category, :target [:variable [:template-tag "id"]], :value "2"}]))
 
 ;; variable -- unspecified
 (expect
   #metabase.query_processor.middleware.parameters.sql.NoValue{}
-  (#'sql/value-for-tag {:name "id", :display_name "ID", :type "text"} nil))
+  (#'sql/value-for-tag {:name "id", :display-name "ID", :type :text} nil))
 
 ;; variable -- default
 (expect
   "100"
-  (#'sql/value-for-tag {:name "id", :display_name "ID", :type "text", :required true, :default "100"} nil))
+  (#'sql/value-for-tag {:name "id", :display-name "ID", :type :text, :required true, :default "100"} nil))
 
 ;; dimension -- specified
 (expect
@@ -300,11 +302,11 @@
            :parent_id nil
            :table_id  (data/id :checkins)
            :base_type :type/Date}
-   :param {:type   "date/range"
-           :target ["dimension" ["template-tag" "checkin_date"]]
+   :param {:type   :date/range
+           :target [:dimension [:template-tag "checkin_date"]]
            :value  "2015-04-01~2015-05-01"}}
-  (into {} (#'sql/value-for-tag {:name "checkin_date", :display_name "Checkin Date", :type "dimension", :dimension ["field-id" (data/id :checkins :date)]}
-                                [{:type "date/range", :target ["dimension" ["template-tag" "checkin_date"]], :value "2015-04-01~2015-05-01"}])))
+  (into {} (#'sql/value-for-tag {:name "checkin_date", :display-name "Checkin Date", :type :dimension, :dimension [:field-id (data/id :checkins :date)]}
+                                [{:type :date/range, :target [:dimension [:template-tag "checkin_date"]], :value "2015-04-01~2015-05-01"}])))
 
 ;; dimension -- unspecified
 (expect
@@ -313,7 +315,7 @@
            :table_id  (data/id :checkins)
            :base_type :type/Date}
    :param nil}
-  (into {} (#'sql/value-for-tag {:name "checkin_date", :display_name "Checkin Date", :type "dimension", :dimension ["field-id" (data/id :checkins :date)]}
+  (into {} (#'sql/value-for-tag {:name "checkin_date", :display-name "Checkin Date", :type :dimension, :dimension [:field-id (data/id :checkins :date)]}
                                 nil)))
 
 ;; multiple values for the same tag should return a vector with multiple params instead of a single param
@@ -322,190 +324,193 @@
            :parent_id nil
            :table_id  (data/id :checkins)
            :base_type :type/Date}
-   :param [{:type   "date/range"
-            :target ["dimension" ["template-tag" "checkin_date"]]
+   :param [{:type   :date/range
+            :target [:dimension [:template-tag "checkin_date"]]
             :value  "2015-01-01~2016-09-01"}
-           {:type   "date/single"
-            :target ["dimension" ["template-tag" "checkin_date"]]
+           {:type   :date/single
+            :target [:dimension [:template-tag "checkin_date"]]
             :value  "2015-07-01"}]}
-  (into {} (#'sql/value-for-tag {:name "checkin_date", :display_name "Checkin Date", :type "dimension", :dimension ["field-id" (data/id :checkins :date)]}
-                                [{:type "date/range",  :target ["dimension" ["template-tag" "checkin_date"]], :value "2015-01-01~2016-09-01"}
-                                 {:type "date/single", :target ["dimension" ["template-tag" "checkin_date"]], :value "2015-07-01"}])))
+  (into {} (#'sql/value-for-tag {:name "checkin_date", :display-name "Checkin Date", :type :dimension, :dimension [:field-id (data/id :checkins :date)]}
+                                [{:type :date/range,  :target [:dimension [:template-tag "checkin_date"]], :value "2015-01-01~2016-09-01"}
+                                 {:type :date/single, :target [:dimension [:template-tag "checkin_date"]], :value "2015-07-01"}])))
 
 
 ;;; ------------------------------------------- expansion tests: variables -------------------------------------------
 
 (defn- expand* [query]
   (qpt/with-h2-db-timezone
-    (-> (expand (assoc query :driver (driver/engine->driver :h2)))
+    (-> (sql/expand (assoc (normalize/normalize query) :driver (driver/engine->driver :h2)))
         :native
-        (select-keys [:query :params :template_tags]))))
+        (select-keys [:query :params :template-tags]))))
 
 ;; unspecified optional param
 (expect
   {:query         "SELECT * FROM orders ;"
    :params        []
-   :template_tags {:id {:name "id", :display_name "ID", :type "number"}}}
+   :template-tags {:id {:name "id", :display-name "ID", :type :number}}}
   (expand* {:native     {:query         "SELECT * FROM orders [[WHERE id = {{id}}]];"
-                         :template_tags {:id {:name "id", :display_name "ID", :type "number"}}}
+                         :template-tags {:id {:name "id", :display-name "ID", :type :number}}}
             :parameters []}))
 
 ;; unspecified *required* param
 (expect
   Exception
-  (expand {:native     {:query "SELECT * FROM orders [[WHERE id = {{id}}]];"
-                        :template_tags {:id {:name "id", :display_name "ID", :type "number", :required true}}}
-           :parameters []}))
+  (sql/expand {:native     {:query "SELECT * FROM orders [[WHERE id = {{id}}]];"
+                            :template-tags {:id {:name "id", :display-name "ID", :type :number, :required true}}}
+               :parameters []}))
 
 ;; default value
 (expect
   {:query         "SELECT * FROM orders WHERE id = 100;"
    :params        []
-   :template_tags {:id {:name "id", :display_name "ID", :type "number", :required true, :default "100"}}}
+   :template-tags {:id {:name "id", :display-name "ID", :type :number, :required true, :default "100"}}}
   (expand* {:native     {:query         "SELECT * FROM orders WHERE id = {{id}};"
-                         :template_tags {:id {:name "id", :display_name "ID", :type "number", :required true, :default "100"}}}
+                         :template-tags {:id {:name "id", :display-name "ID", :type :number, :required true, :default "100"}}}
             :parameters []}))
 
 ;; specified param (numbers)
 (expect
   {:query         "SELECT * FROM orders WHERE id = 2;"
    :params        []
-   :template_tags {:id {:name "id", :display_name "ID", :type "number", :required true, :default "100"}}}
+   :template-tags {:id {:name "id", :display-name "ID", :type :number, :required true, :default "100"}}}
   (expand* {:native     {:query         "SELECT * FROM orders WHERE id = {{id}};"
-                         :template_tags {:id {:name "id", :display_name "ID", :type "number", :required true, :default "100"}}}
-            :parameters [{:type "category", :target ["variable" ["template-tag" "id"]], :value "2"}]}))
+                         :template-tags {:id {:name "id", :display-name "ID", :type :number, :required true, :default "100"}}}
+            :parameters [{:type "category", :target [:variable [:template-tag "id"]], :value "2"}]}))
 
 ;; specified param (date/single)
 (expect
   {:query         "SELECT * FROM orders WHERE created_at > ?;"
    :params        [#inst "2016-07-19T00:00:00.000000000-00:00"]
-   :template_tags {:created_at {:name "created_at", :display_name "Created At", :type "date"}}}
+   :template-tags {:created_at {:name "created_at", :display-name "Created At", :type :date}}}
   (expand* {:native     {:query         "SELECT * FROM orders WHERE created_at > {{created_at}};"
-                         :template_tags {:created_at {:name "created_at", :display_name "Created At", :type "date"}}}
-            :parameters [{:type "date/single", :target ["variable" ["template-tag" "created_at"]], :value "2016-07-19"}]}))
+                         :template-tags {:created_at {:name "created_at", :display-name "Created At", :type "date"}}}
+            :parameters [{:type :date/single, :target [:variable [:template-tag "created_at"]], :value "2016-07-19"}]}))
 
 ;; specified param (text)
 (expect
   {:query         "SELECT * FROM products WHERE category = ?;"
    :params        ["Gizmo"]
-   :template_tags {:category {:name "category", :display_name "Category", :type "text"}}}
+   :template-tags {:category {:name "category", :display-name "Category", :type :text}}}
   (expand* {:native     {:query         "SELECT * FROM products WHERE category = {{category}};"
-                         :template_tags {:category {:name "category", :display_name "Category", :type "text"}}}
-            :parameters [{:type "category", :target ["variable" ["template-tag" "category"]], :value "Gizmo"}]}))
+                         :template-tags {:category {:name "category", :display-name "Category", :type :text}}}
+            :parameters [{:type "category", :target [:variable [:template-tag "category"]], :value "Gizmo"}]}))
 
 
 ;;; ------------------------------------------ expansion tests: dimensions -------------------------------------------
 
 (defn- expand-with-dimension-param [dimension-param]
   (with-redefs [t/now (constantly (t/date-time 2016 06 07 12 0 0))]
-    (-> {:native     {:query "SELECT * FROM checkins WHERE {{date}};"
-                      :template_tags {:date {:name "date", :display_name "Checkin Date", :type "dimension", :dimension ["field-id" (data/id :checkins :date)]}}}
+    (-> {:native     {:query         "SELECT * FROM checkins WHERE {{date}};"
+                      :template-tags {:date {:name         "date"
+                                             :display-name "Checkin Date"
+                                             :type         :dimension
+                                             :dimension    [:field-id (data/id :checkins :date)]}}}
          :parameters (when dimension-param
-                       [(merge {:target ["dimension" ["template-tag" "date"]]}
+                       [(merge {:target [:dimension [:template-tag "date"]]}
                                dimension-param)])}
         expand*
-        (dissoc :template_tags))))
+        (dissoc :template-tags))))
 
 ;; dimension (date/single)
 (expect
   {:query  "SELECT * FROM checkins WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) = ?;"
    :params [#inst "2016-07-01T00:00:00.000000000-00:00"]}
-  (expand-with-dimension-param {:type "date/single", :value "2016-07-01"}))
+  (expand-with-dimension-param {:type :date/single, :value "2016-07-01"}))
 
 ;; dimension (date/range)
 (expect
   {:query  "SELECT * FROM checkins WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) BETWEEN ? AND ?;"
    :params [#inst "2016-07-01T00:00:00.000000000-00:00"
             #inst "2016-08-01T00:00:00.000000000-00:00"]}
-  (expand-with-dimension-param {:type "date/range", :value "2016-07-01~2016-08-01"}))
+  (expand-with-dimension-param {:type :date/range, :value "2016-07-01~2016-08-01"}))
 
 ;; dimension (date/month-year)
 (expect
   {:query  "SELECT * FROM checkins WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) BETWEEN ? AND ?;"
    :params [#inst "2016-07-01T00:00:00.000000000-00:00"
             #inst "2016-07-31T00:00:00.000000000-00:00"]}
-  (expand-with-dimension-param {:type "date/month-year", :value "2016-07"}))
+  (expand-with-dimension-param {:type :date/month-year, :value "2016-07"}))
 
 ;; dimension (date/quarter-year)
 (expect
   {:query  "SELECT * FROM checkins WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) BETWEEN ? AND ?;"
    :params [#inst "2016-01-01T00:00:00.000000000-00:00"
             #inst "2016-03-31T00:00:00.000000000-00:00"]}
-  (expand-with-dimension-param {:type "date/quarter-year", :value "Q1-2016"}))
+  (expand-with-dimension-param {:type :date/quarter-year, :value "Q1-2016"}))
 
 ;; dimension (date/all-options, before)
 (expect
   {:query  "SELECT * FROM checkins WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) < ?;"
    :params [#inst "2016-07-01T00:00:00.000000000-00:00"]}
-  (expand-with-dimension-param {:type "date/all-options", :value "~2016-07-01"}))
+  (expand-with-dimension-param {:type :date/all-options, :value "~2016-07-01"}))
 
 ;; dimension (date/all-options, after)
 (expect
   {:query  "SELECT * FROM checkins WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) > ?;"
    :params [#inst "2016-07-01T00:00:00.000000000-00:00"]}
-  (expand-with-dimension-param {:type "date/all-options", :value "2016-07-01~"}))
+  (expand-with-dimension-param {:type :date/all-options, :value "2016-07-01~"}))
 
 ;; relative date -- "yesterday"
 (expect
   {:query  "SELECT * FROM checkins WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) = ?;"
    :params [#inst "2016-06-06T00:00:00.000000000-00:00"]}
-  (expand-with-dimension-param {:type "date/range", :value "yesterday"}))
+  (expand-with-dimension-param {:type :date/range, :value "yesterday"}))
 
 ;; relative date -- "past7days"
 (expect
   {:query  "SELECT * FROM checkins WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) BETWEEN ? AND ?;"
    :params [#inst "2016-05-31T00:00:00.000000000-00:00"
             #inst "2016-06-06T00:00:00.000000000-00:00"]}
-  (expand-with-dimension-param {:type "date/range", :value "past7days"}))
+  (expand-with-dimension-param {:type :date/range, :value "past7days"}))
 
 ;; relative date -- "past30days"
 (expect
   {:query  "SELECT * FROM checkins WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) BETWEEN ? AND ?;"
    :params [#inst "2016-05-08T00:00:00.000000000-00:00"
             #inst "2016-06-06T00:00:00.000000000-00:00"]}
-  (expand-with-dimension-param {:type "date/range", :value "past30days"}))
+  (expand-with-dimension-param {:type :date/range, :value "past30days"}))
 
 ;; relative date -- "thisweek"
 (expect
   {:query  "SELECT * FROM checkins WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) BETWEEN ? AND ?;"
    :params [#inst "2016-06-05T00:00:00.000000000-00:00"
             #inst "2016-06-11T00:00:00.000000000-00:00"]}
-  (expand-with-dimension-param {:type "date/range", :value "thisweek"}))
+  (expand-with-dimension-param {:type :date/range, :value "thisweek"}))
 
 ;; relative date -- "thismonth"
 (expect
   {:query  "SELECT * FROM checkins WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) BETWEEN ? AND ?;"
    :params [#inst "2016-06-01T00:00:00.000000000-00:00"
             #inst "2016-06-30T00:00:00.000000000-00:00"]}
-  (expand-with-dimension-param {:type "date/range", :value "thismonth"}))
+  (expand-with-dimension-param {:type :date/range, :value "thismonth"}))
 
 ;; relative date -- "thisyear"
 (expect
   {:query  "SELECT * FROM checkins WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) BETWEEN ? AND ?;"
    :params [#inst "2016-01-01T00:00:00.000000000-00:00"
             #inst "2016-12-31T00:00:00.000000000-00:00"]}
-  (expand-with-dimension-param {:type "date/range", :value "thisyear"}))
+  (expand-with-dimension-param {:type :date/range, :value "thisyear"}))
 
 ;; relative date -- "lastweek"
 (expect
   {:query  "SELECT * FROM checkins WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) BETWEEN ? AND ?;"
    :params [#inst "2016-05-29T00:00:00.000000000-00:00"
             #inst "2016-06-04T00:00:00.000000000-00:00"]}
-  (expand-with-dimension-param {:type "date/range", :value "lastweek"}))
+  (expand-with-dimension-param {:type :date/range, :value "lastweek"}))
 
 ;; relative date -- "lastmonth"
 (expect
   {:query  "SELECT * FROM checkins WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) BETWEEN ? AND ?;"
    :params [#inst "2016-05-01T00:00:00.000000000-00:00"
             #inst "2016-05-31T00:00:00.000000000-00:00"]}
-  (expand-with-dimension-param {:type "date/range", :value "lastmonth"}))
+  (expand-with-dimension-param {:type :date/range, :value "lastmonth"}))
 
 ;; relative date -- "lastyear"
 (expect
   {:query  "SELECT * FROM checkins WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) BETWEEN ? AND ?;"
    :params [#inst "2015-01-01T00:00:00.000000000-00:00"
             #inst "2015-12-31T00:00:00.000000000-00:00"]}
-  (expand-with-dimension-param {:type "date/range", :value "lastyear"}))
+  (expand-with-dimension-param {:type :date/range, :value "lastyear"}))
 
 ;; dimension with no value -- just replace with an always true clause (e.g. "WHERE 1 = 1")
 (expect
@@ -517,13 +522,13 @@
 (expect
   {:query  "SELECT * FROM checkins WHERE \"PUBLIC\".\"CHECKINS\".\"DATE\" = 100;"
    :params []}
-  (expand-with-dimension-param {:type "number", :value "100"}))
+  (expand-with-dimension-param {:type :number, :value "100"}))
 
 ;; dimension -- text
 (expect
   {:query  "SELECT * FROM checkins WHERE \"PUBLIC\".\"CHECKINS\".\"DATE\" = ?;"
    :params ["100"]}
-  (expand-with-dimension-param {:type "text", :value "100"}))
+  (expand-with-dimension-param {:type :text, :value "100"}))
 
 
 ;;; -------------------------------------------- "REAL" END-TO-END-TESTS ---------------------------------------------
@@ -557,8 +562,13 @@
     (format-rows-by [int]
       (process-native
         :native     {:query         (format "SELECT COUNT(*) FROM %s WHERE {{checkin_date}}" (checkins-identifier))
-                     :template_tags {:checkin_date {:name "checkin_date", :display_name "Checkin Date", :type "dimension", :dimension ["field-id" (data/id :checkins :date)]}}}
-        :parameters [{:type "date/range", :target ["dimension" ["template-tag" "checkin_date"]], :value "2015-04-01~2015-05-01"}]))))
+                     :template-tags {:checkin_date {:name         "checkin_date"
+                                                    :display-name "Checkin Date"
+                                                    :type         :dimension
+                                                    :dimension    [:field-id (data/id :checkins :date)]}}}
+        :parameters [{:type   :date/range
+                      :target [:dimension [:template-tag "checkin_date"]]
+                      :value  "2015-04-01~2015-05-01"}]))))
 
 ;; no parameter -- should give us a query with "WHERE 1 = 1"
 (datasets/expect-with-engines sql-parameters-engines
@@ -567,7 +577,10 @@
     (format-rows-by [int]
       (process-native
         :native     {:query         (format "SELECT COUNT(*) FROM %s WHERE {{checkin_date}}" (checkins-identifier))
-                     :template_tags {:checkin_date {:name "checkin_date", :display_name "Checkin Date", :type "dimension", :dimension ["field-id" (data/id :checkins :date)]}}}
+                     :template-tags {:checkin_date {:name         "checkin_date"
+                                                    :display-name "Checkin Date"
+                                                    :type         :dimension
+                                                    :dimension    [:field-id (data/id :checkins :date)]}}}
         :parameters []))))
 
 ;; test that relative dates work correctly. It should be enough to try just one type of relative date here,
@@ -578,8 +591,11 @@
     (format-rows-by [int]
       (process-native
         :native     {:query         (format "SELECT COUNT(*) FROM %s WHERE {{checkin_date}}" (checkins-identifier))
-                     :template_tags {:checkin_date {:name "checkin_date", :display_name "Checkin Date", :type "dimension", :dimension ["field-id" (data/id :checkins :date)]}}}
-        :parameters [{:type "date/relative", :target ["dimension" ["template-tag" "checkin_date"]], :value "thismonth"}]))))
+                     :template-tags {:checkin_date {:name         "checkin_date"
+                                                    :display-name "Checkin Date"
+                                                    :type         :dimension
+                                                    :dimension    [:field-id (data/id :checkins :date)]}}}
+        :parameters [{:type :date/relative, :target [:dimension [:template-tag "checkin_date"]], :value "thismonth"}]))))
 
 
 ;; test that multiple filters applied to the same variable combine into `AND` clauses (#3539)
@@ -588,10 +604,13 @@
   (first-row
     (format-rows-by [int]
       (process-native
-       :native     {:query         (format "SELECT COUNT(*) FROM %s WHERE {{checkin_date}}" (checkins-identifier))
-                    :template_tags {:checkin_date {:name "checkin_date", :display_name "Checkin Date", :type "dimension", :dimension ["field-id" (data/id :checkins :date)]}}}
-       :parameters [{:type "date/range",  :target ["dimension" ["template-tag" "checkin_date"]], :value "2015-01-01~2016-09-01"}
-                    {:type "date/single", :target ["dimension" ["template-tag" "checkin_date"]], :value "2015-07-01"}]))))
+        :native     {:query         (format "SELECT COUNT(*) FROM %s WHERE {{checkin_date}}" (checkins-identifier))
+                     :template-tags {:checkin_date {:name         "checkin_date"
+                                                    :display-name "Checkin Date"
+                                                    :type         :dimension
+                                                    :dimension    [:field-id (data/id :checkins :date)]}}}
+        :parameters [{:type :date/range, :target [:dimension [:template-tag "checkin_date"]], :value "2015-01-01~2016-09-01"}
+                     {:type :date/single, :target [:dimension [:template-tag "checkin_date"]], :value "2015-07-01"}]))))
 
 ;; Test that native dates are parsed with the report timezone (when supported)
 (datasets/expect-with-engines (disj sql-parameters-engines :sqlite)
@@ -614,8 +633,8 @@
                                       "SELECT cast({{date}} as date) from dual"
                                       :else
                                       "SELECT cast({{date}} as date)")
-                     :template_tags {:date {:name "date" :display_name "Date" :type "date" }}}
-        :parameters [{:type "date/single" :target ["variable" ["template-tag" "date"]] :value "2018-04-18"}]))))
+                     :template-tags {:date {:name "date" :display-name "Date" :type :date}}}
+        :parameters [{:type :date/single :target [:variable [:template-tag "date"]] :value "2018-04-18"}]))))
 
 
 ;;; -------------------------------------------- SQL PARAMETERS 2.0 TESTS --------------------------------------------
@@ -624,53 +643,66 @@
 
 (expect
   {:query         "SELECT count(*) FROM CHECKINS WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) BETWEEN ? AND ?"
-   :template_tags {:created_at {:name "created_at", :display_name "Created At", :type "dimension", :dimension ["field-id" (data/id :checkins :date)]}},
+   :template-tags {:created_at {:name         "created_at"
+                                :display-name "Created At"
+                                :type         :dimension
+                                :dimension    [:field-id (data/id :checkins :date)]}},
    :params        [#inst "2017-03-01T00:00:00.000000000-00:00"
                    #inst "2017-03-31T00:00:00.000000000-00:00"]}
   (expand* {:native     {:query         "SELECT count(*) FROM CHECKINS WHERE {{created_at}}"
-                         :template_tags {:created_at {:name "created_at", :display_name "Created At",
-                                                      :type "dimension", :dimension ["field-id" (data/id :checkins :date)]}}}
-            :parameters [{:type "date/month-year", :target ["dimension" ["template-tag" "created_at"]], :value "2017-03"}]}))
+                         :template-tags {:created_at {:name         "created_at"
+                                                      :display-name "Created At"
+                                                      :type         :dimension
+                                                      :dimension    [:field-id (data/id :checkins :date)]}}}
+            :parameters [{:type :date/month-year, :target [:dimension [:template-tag "created_at"]], :value "2017-03"}]}))
 
 (expect
   {:query         "SELECT count(*) FROM ORDERS"
-   :template_tags {:price {:name "price", :display_name "Price", :type "number", :required false}}
+   :template-tags {:price {:name "price", :display-name "Price", :type :number, :required false}}
    :params        []}
   (expand* {:native {:query         "SELECT count(*) FROM ORDERS [[WHERE price > {{price}}]]"
-                     :template_tags {:price {:name "price", :display_name "Price", :type "number", :required false}}}}))
+                     :template-tags {:price {:name "price", :display-name "Price", :type :number, :required false}}}}))
 
 (expect
   {:query         "SELECT count(*) FROM ORDERS WHERE price > 100"
-   :template_tags {:price {:name "price", :display_name "Price", :type "number", :required false}}
+   :template-tags {:price {:name "price", :display-name "Price", :type :number, :required false}}
    :params        []}
   (expand* {:native      {:query         "SELECT count(*) FROM ORDERS [[WHERE price > {{price}}]]"
-                          :template_tags {:price {:name "price", :display_name "Price", :type "number", :required false}}}
-            :parameters   [{:type "category", :target ["variable" ["template-tag" "price"]], :value "100"}]}))
+                          :template-tags {:price {:name "price", :display-name "Price", :type :number, :required false}}}
+            :parameters   [{:type "category", :target [:variable [:template-tag "price"]], :value "100"}]}))
 
 (expect
   {:query         "SELECT count(*) FROM PRODUCTS WHERE TITLE LIKE ?"
-   :template_tags {:x {:name "x", :display_name "X", :type "text", :required true, :default "%Toucan%"}}
+   :template-tags {:x {:name "x", :display-name "X", :type :text, :required true, :default "%Toucan%"}}
    :params        ["%Toucan%"]}
   (expand* {:native     {:query         "SELECT count(*) FROM PRODUCTS WHERE TITLE LIKE {{x}}",
-                         :template_tags {:x {:name "x", :display_name "X", :type "text", :required true, :default "%Toucan%"}}},
-            :parameters [{:type "category", :target ["variable" ["template-tag" "x"]]}]}))
+                         :template-tags {:x {:name         "x"
+                                             :display-name "X"
+                                             :type         :text
+                                             :required     true
+                                             :default      "%Toucan%"}}},
+            :parameters [{:type "category", :target [:variable [:template-tag "x"]]}]}))
 
 ;; make sure that you can use the same parameter multiple times (#4659)
 (expect
   {:query         "SELECT count(*) FROM products WHERE title LIKE ? AND subtitle LIKE ?"
-   :template_tags {:x {:name "x", :display_name "X", :type "text", :required true, :default "%Toucan%"}}
+   :template-tags {:x {:name "x", :display-name "X", :type :text, :required true, :default "%Toucan%"}}
    :params        ["%Toucan%" "%Toucan%"]}
   (expand* {:native     {:query         "SELECT count(*) FROM products WHERE title LIKE {{x}} AND subtitle LIKE {{x}}",
-                         :template_tags {:x {:name "x", :display_name "X", :type "text", :required true, :default "%Toucan%"}}},
-            :parameters [{:type "category", :target ["variable" ["template-tag" "x"]]}]}))
+                         :template-tags {:x {:name         "x"
+                                             :display-name "X"
+                                             :type         :text
+                                             :required     true
+                                             :default      "%Toucan%"}}},
+            :parameters [{:type "category", :target [:variable [:template-tag "x"]]}]}))
 
 (expect
   {:query         "SELECT * FROM ORDERS WHERE true  AND ID = ? OR USER_ID = ?"
-   :template_tags {:id {:name "id", :display_name "ID", :type "text"}}
+   :template-tags {:id {:name "id", :display-name "ID", :type :text}}
    :params        ["2" "2"]}
   (expand* {:native     {:query         "SELECT * FROM ORDERS WHERE true [[ AND ID = {{id}} OR USER_ID = {{id}} ]]"
-                         :template_tags {:id {:name "id", :display_name "ID", :type "text"}}}
-            :parameters [{:type "category", :target ["variable" ["template-tag" "id"]], :value "2"}]}))
+                         :template-tags {:id {:name "id", :display-name "ID", :type :text}}}
+            :parameters [{:type "category", :target [:variable [:template-tag "id"]], :value "2"}]}))
 
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
@@ -683,10 +715,10 @@
                        "FROM CHECKINS "
                        "WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) BETWEEN ? AND ? "
                        "GROUP BY \"DATE\"")
-   :template_tags {:checkin_date {:name         "checkin_date"
-                                  :display_name "Checkin Date"
-                                  :type         "dimension"
-                                  :dimension    ["field-id" (data/id :checkins :date)]}}
+   :template-tags {:checkin_date {:name         "checkin_date"
+                                  :display-name "Checkin Date"
+                                  :type         :dimension
+                                  :dimension    [:field-id (data/id :checkins :date)]}}
    :params        [#inst "2017-10-31T00:00:00.000000000-00:00"
                    #inst "2017-11-04T00:00:00.000000000-00:00"]}
   (with-redefs [t/now (constantly (t/date-time 2017 11 05 12 0 0))]
@@ -694,42 +726,42 @@
                                                "FROM CHECKINS "
                                                "WHERE {{checkin_date}} "
                                                "GROUP BY \"DATE\"")
-                           :template_tags {:checkin_date {:name         "checkin_date"
-                                                          :display_name "Checkin Date"
-                                                          :type         "dimension"
-                                                          :dimension    ["field-id" (data/id :checkins :date)]}}}
-              :parameters [{:type   "date/range"
-                            :target ["dimension" ["template-tag" "checkin_date"]]
+                           :template-tags {:checkin_date {:name         "checkin_date"
+                                                          :display-name "Checkin Date"
+                                                          :type         :dimension
+                                                          :dimension    [:field-id (data/id :checkins :date)]}}}
+              :parameters [{:type   :date/range
+                            :target [:dimension [:template-tag "checkin_date"]]
                             :value  "past5days"}]})))
 
 ;; Make sure defaults values get picked up for field filter clauses
 (expect
   {:field {:name "DATE", :parent_id nil, :table_id (data/id :checkins), :base_type :type/Date}
-   :param {:type   "date/all-options"
-           :target ["dimension" ["template-tag" "checkin_date"]]
+   :param {:type   :date/all-options
+           :target [:dimension [:template-tag "checkin_date"]]
            :value  "past5days"}}
   (#'sql/dimension-value-for-tag {:name         "checkin_date"
-                                  :display_name "Checkin Date"
-                                  :type         "dimension"
+                                  :display-name "Checkin Date"
+                                  :type         :dimension
                                   :dimension    [:field-id (data/id :checkins :date)]
                                   :default      "past5days"
-                                  :widget_type  "date/all-options"}
+                                  :widget-type  :date/all-options}
                                  nil))
 
 ;; Make sure we can specify the type of a default value for a "Dimension" (Field Filter) by setting the
-;; `:widget_type` key. Check that it works correctly with relative dates...
+;; `:widget-type` key. Check that it works correctly with relative dates...
 (expect
   {:query         (str "SELECT count(*) AS \"count\", \"DATE\" "
                        "FROM CHECKINS "
                        "WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) BETWEEN ? AND ? "
                        "GROUP BY \"DATE\"")
-   :template_tags {:checkin_date
+   :template-tags {:checkin_date
                    {:name         "checkin_date"
-                    :display_name "Checkin Date"
-                    :type         "dimension"
-                    :dimension    ["field-id" (data/id :checkins :date)]
+                    :display-name "Checkin Date"
+                    :type         :dimension
+                    :dimension    [:field-id (data/id :checkins :date)]
                     :default      "past5days"
-                    :widget_type  "date/all-options"}}
+                    :widget-type  :date/all-options}}
    :params        [#inst "2017-10-31T00:00:00.000000000-00:00"
                    #inst "2017-11-04T00:00:00.000000000-00:00"]}
   (with-redefs [t/now (constantly (t/date-time 2017 11 05 12 0 0))]
@@ -737,12 +769,12 @@
                                            "FROM CHECKINS "
                                            "WHERE {{checkin_date}} "
                                            "GROUP BY \"DATE\"")
-                       :template_tags {:checkin_date {:name         "checkin_date"
-                                                      :display_name "Checkin Date"
-                                                      :type         "dimension"
-                                                      :dimension    ["field-id" (data/id :checkins :date)]
+                       :template-tags {:checkin_date {:name         "checkin_date"
+                                                      :display-name "Checkin Date"
+                                                      :type         :dimension
+                                                      :dimension    [:field-id (data/id :checkins :date)]
                                                       :default      "past5days"
-                                                      :widget_type  "date/all-options"}}}})))
+                                                      :widget-type  :date/all-options}}}})))
 
 ;; Check that it works with absolute dates as well
 (expect
@@ -750,23 +782,23 @@
                        "FROM CHECKINS "
                        "WHERE CAST(\"PUBLIC\".\"CHECKINS\".\"DATE\" AS date) = ? "
                        "GROUP BY \"DATE\"")
-   :template_tags {:checkin_date {:name         "checkin_date"
-                                  :display_name "Checkin Date"
-                                  :type         "dimension"
-                                  :dimension    ["field-id" (data/id :checkins :date)]
+   :template-tags {:checkin_date {:name         "checkin_date"
+                                  :display-name "Checkin Date"
+                                  :type         :dimension
+                                  :dimension    [:field-id (data/id :checkins :date)]
                                   :default      "2017-11-14"
-                                  :widget_type  "date/all-options"}}
+                                  :widget-type  :date/all-options}}
    :params        [#inst "2017-11-14T00:00:00.000000000-00:00"]}
   (expand* {:native {:query         (str "SELECT count(*) AS \"count\", \"DATE\" "
                                          "FROM CHECKINS "
                                          "WHERE {{checkin_date}} "
                                          "GROUP BY \"DATE\"")
-                     :template_tags {:checkin_date {:name         "checkin_date"
-                                                    :display_name "Checkin Date"
-                                                    :type         "dimension"
-                                                    :dimension    ["field-id" (data/id :checkins :date)]
+                     :template-tags {:checkin_date {:name         "checkin_date"
+                                                    :display-name "Checkin Date"
+                                                    :type         :dimension
+                                                    :dimension    [:field-id (data/id :checkins :date)]
                                                     :default      "2017-11-14"
-                                                    :widget_type  "date/all-options"}}}}))
+                                                    :widget-type  :date/all-options}}}}))
 
 
 ;;; ------------------------------- Multiple Value Support (comma-separated or array) --------------------------------
@@ -778,11 +810,11 @@
         {:database   (data/id)
          :type       "native"
          :native     {:query         "SELECT * FROM USERS [[where id IN ({{ids_list}})]]"
-                      :template_tags {:ids_list {:name         "ids_list"
-                                                 :display_name "Ids list"
-                                                 :type         "number"}}}
+                      :template-tags {:ids_list {:name         "ids_list"
+                                                 :display-name "Ids list"
+                                                 :type         :number}}}
          :parameters [{:type   "category"
-                       :target ["variable" ["template-tag" "ids_list"]]
+                       :target [:variable [:template-tag "ids_list"]]
                        :value  "1,2,3"}]})
       :data :native_form :query))
 
@@ -790,31 +822,31 @@
 ;; make sure you can now also pass multiple values in by passing an array of values
 (expect
   {:query         "SELECT * FROM CATEGORIES where name IN (?, ?, ?)"
-   :template_tags {:names_list {:name "names_list", :display_name "Names List", :type "text"}}
+   :template-tags {:names_list {:name "names_list", :display-name "Names List", :type :text}}
    :params        ["BBQ" "Bakery" "Bar"]}
   (expand*
    {:native     {:query         "SELECT * FROM CATEGORIES [[where name IN ({{names_list}})]]"
-                 :template_tags {:names_list {:name         "names_list"
-                                              :display_name "Names List"
-                                              :type         "text"}}}
+                 :template-tags {:names_list {:name         "names_list"
+                                              :display-name "Names List"
+                                              :type         :text}}}
     :parameters [{:type   "category"
-                  :target ["variable" ["template-tag" "names_list"]]
+                  :target [:variable [:template-tag "names_list"]]
                   :value  ["BBQ", "Bakery", "Bar"]}]}))
 
 ;; Make sure arrays of values also work for 'field filter' params
 (expect
   {:query         "SELECT * FROM CATEGORIES WHERE \"PUBLIC\".\"USERS\".\"ID\" IN (?, ?, ?)",
-   :template_tags {:names_list {:name         "names_list"
-                                :display_name "Names List"
-                                :type         "dimension"
-                                :dimension    ["field-id" (data/id :users :id)]}}
+   :template-tags {:names_list {:name         "names_list"
+                                :display-name "Names List"
+                                :type         :dimension
+                                :dimension    [:field-id (data/id :users :id)]}}
    :params        ["BBQ" "Bakery" "Bar"]}
   (expand*
    {:native     {:query         "SELECT * FROM CATEGORIES WHERE {{names_list}}"
-                 :template_tags {:names_list {:name         "names_list"
-                                              :display_name "Names List"
-                                              :type         "dimension"
-                                              :dimension    ["field-id" (data/id :users :id)]}}}
-    :parameters [{:type   "text"
-                  :target ["dimension" ["template-tag" "names_list"]]
+                 :template-tags {:names_list {:name         "names_list"
+                                              :display-name "Names List"
+                                              :type         :dimension
+                                              :dimension    [:field-id (data/id :users :id)]}}}
+    :parameters [{:type   :text
+                  :target [:dimension [:template-tag "names_list"]]
                   :value  ["BBQ", "Bakery", "Bar"]}]}))
