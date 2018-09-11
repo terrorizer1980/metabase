@@ -147,9 +147,10 @@
   [template-tags]
   (into {} (for [[tag-name tag-def] template-tags]
              [(keyword tag-name)
-              (-> (normalize-tokens tag-def ::ignore-path)
-                  (update :type        mbql.u/normalize-token)
-                  (update :widget-type #(when % (mbql.u/normalize-token %))))])))
+              (let [tag-def (-> (normalize-tokens tag-def ::ignore-path)
+                                (update :type mbql.u/normalize-token))]
+                (cond-> tag-def
+                  (:widget-type tag-def) (update :widget-type #(when % (mbql.u/normalize-token %)))))])))
 
 (defn- normalize-query-parameter [param]
   (-> param

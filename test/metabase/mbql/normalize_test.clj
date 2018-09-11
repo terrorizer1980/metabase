@@ -168,7 +168,7 @@
 ;; make sure we're not running around trying to normalize the type in native query params
 (expect
   {:type       :native
-   :parameters [{:type   "date/range"
+   :parameters [{:type   :date/range
                  :target [:dimension [:template-tag "checkin_date"]]
                  :value  "2015-04-01~2015-05-01"}]}
   (#'normalize/normalize-tokens {:type       :native
@@ -182,14 +182,14 @@
    :native {:query         "SELECT COUNT(*) FROM \"PUBLIC\".\"CHECKINS\" WHERE {{checkin_date}}"
             :template-tags {:checkin_date {:name         "checkin_date"
                                            :display-name "Checkin Date"
-                                           :type         "dimension"    ; TODO - should we normalize `:type` here?
+                                           :type         :dimension
                                            :dimension    [:field-id 14]}}}}
   (#'normalize/normalize-tokens
    {:type   "native"
     :native {:query         "SELECT COUNT(*) FROM \"PUBLIC\".\"CHECKINS\" WHERE {{checkin_date}}"
              :template_tags {:checkin_date {:name         "checkin_date"
                                             :display_name "Checkin Date"
-                                            :type         "dimension",
+                                            :type         :dimension
                                             :dimension    ["field-id" 14]}}}}))
 
 ;; native template tags `:type` should get normalized

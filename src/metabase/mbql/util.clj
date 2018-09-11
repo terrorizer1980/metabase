@@ -60,3 +60,28 @@
            (conj! instances clause))))
      x)
     (persistent! instances)))
+
+
+;;; +----------------------------------------------------------------------------------------------------------------+
+;;; |                                       Functions for manipulating queries                                       |
+;;; +----------------------------------------------------------------------------------------------------------------+
+
+;; TODO - we should probably validate input and output of these at some point. But that would require rewriting tests
+;; with invalid queries so we can do that later
+
+(defn add-filter-clause
+  "Add an additional filter clause to an `outer-query`."
+  [outer-query new-clause]
+  (update-in outer-query [:query :filter] (fn [existing-clause]
+                                            (cond
+                                              ;; if top-level clause is `:and` then just add the new clause at the end
+                                              (is-clause? :and existing-clause)
+                                              (conj existing-clause new-clause)
+
+                                              ;; otherwise if we have an existing clause join to new one with an `:and`
+                                              existing-clause
+                                              [:and existing-clause new-clause]
+
+                                              ;; if we don't have existing clause then new clause is the new top-level
+                                              :else
+                                              new-clause))))

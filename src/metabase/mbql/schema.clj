@@ -207,7 +207,8 @@
          (s/enum :current :last :next))
   unit  RelativeDatetimeUnit)
 
-(def ^:private Filter
+(def Filter
+  "Schema for a valid MBQL `:filter` clause."
   (one-of and or not = != < > <= >= between inside is-null not-null starts-with ends-with contains does-not-contain
           time-interval))
 
@@ -267,6 +268,6 @@
     (s/optional-key :parameters) [Parameter]}
    (fn [{native :native, mbql :query, query-type :type}]
      (case query-type
-       :native (and native (not mbql))
-       :query  (and mbql   (not native))))
+       :native (core/and native (core/not mbql))
+       :query  (core/and mbql   (core/not native))))
    "Native queries should specify `:native` but not `:query`; MBQL queries should specify `:query` but not `:native`."))

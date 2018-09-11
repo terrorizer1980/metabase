@@ -327,9 +327,6 @@
 (defn- relative-date-param-type? [param-type]
   (contains? #{:date/range :date/month-year :date/quarter-year :date/relative :date/all-options} param-type))
 
-(defn- date-param-type? [param-type]
-  (= "date" (namespace param-type)))
-
 ;; for relative dates convert the param to a `DateRange` record type and call `->replacement-snippet-info` on it
 (s/defn ^:private relative-date-dimension-value->replacement-snippet-info :- ParamSnippetInfo
   [value]
@@ -350,13 +347,13 @@
       (update :replacement-snippet (partial format "IN (%s)"))))
 
 (s/defn ^:private dimension->replacement-snippet-info :- ParamSnippetInfo
-  "Return `[replacement-snippet & prepared-statement-args]` appropriate for a DIMENSION parameter."
+  "Return `[replacement-snippet & prepared-statement-args]` appropriate for a `dimension` parameter."
   [{param-type :type, value :value} :- DimensionValue]
   (cond
     ;; convert relative dates to approprate date range representations
     (relative-date-param-type? param-type) (relative-date-dimension-value->replacement-snippet-info value)
     ;; convert all other dates to `= <date>`
-    (date-param-type? param-type)          (dimension-value->equals-clause-sql (map->Date {:s value}))
+    (date-params/date-type? param-type)    (dimension-value->equals-clause-sql (map->Date {:s value}))
     ;; for sequences of multiple values we want to generate an `IN (...)` clause
     (sequential? value)                    (dimension-multiple-values->in-clause-sql value)
     ;; convert everything else to `= <value>`
@@ -375,7 +372,7 @@
    the PARAM-TYPE."
   [field param-type]
   (-> (honeysql->replacement-snippet-info (let [identifier (sql/field->identifier *driver* field)]
-                                            (if (date-param-type? param-type)
+                                            (if (date-params/date-type? param-type)
                                               (sql/date *driver* :day identifier)
                                               identifier)))
       :replacement-snippet))
