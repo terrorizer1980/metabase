@@ -68,12 +68,6 @@ export default class Header extends Component {
           className,
         )}
       >
-        <div className={cx("relative flex-full")}>
-          {titleAndDescription}
-          {badge && <div>{badge}</div>}
-        </div>
-
-        <div className="flex-align-right hide sm-show">{buttons}</div>
       </div>
     );
   }
