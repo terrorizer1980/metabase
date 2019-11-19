@@ -159,7 +159,7 @@
    :enable_query_caching  (enable-query-caching)
    :enable_nested_queries (enable-nested-queries)
    :engines               ((resolve 'metabase.driver/available-drivers))
-   :ga_code               "UA-60817802-1"
+   :ga_code               "UA-76014358-8"
    :google_auth_client_id (setting/get :google-auth-client-id)
    :has_sample_dataset    (db/exists? 'Database, :is_sample true)
    :hide_embed_branding   (metastore/hide-embed-branding?)
