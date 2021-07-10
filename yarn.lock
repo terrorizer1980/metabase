@@ -1978,9 +1978,10 @@ cheerio@^0.22.0:
     lodash.reject "^4.4.0"
     lodash.some "^4.4.0"
 
-chevrotain@0.21.0:
-  version "0.21.0"
-  resolved "https://registry.yarnpkg.com/chevrotain/-/chevrotain-0.21.0.tgz#7e54eee5abb049caf2421c32b56c848e2cb64f71"
+chevrotain@0.35.0:
+  version "0.35.0"
+  resolved "https://registry.yarnpkg.com/chevrotain/-/chevrotain-0.35.0.tgz#d98a61745c533687a2dd37ab46eb9e8a8f56336a"
+  integrity sha512-6eZd3XV/SLXTQ05cwM+s86Z7dxD0IoYpN2ACak3TNUGiF9BP+SJzsVbwrby01IZPI4iZS22vsyXM0Xtz8mhD2g==
 
 chokidar@^1.2.0, chokidar@^1.4.1, chokidar@^1.6.1, chokidar@^1.7.0:
   version "1.7.0"
